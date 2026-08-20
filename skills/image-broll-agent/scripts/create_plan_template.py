@@ -11,10 +11,6 @@ from pathlib import Path
 from broll_lib import now_iso, save_json
 
 
-def default_image_size(width: int, height: int) -> str:
-    return "1536x1024" if width > height else "1024x1536" if height > width else "1024x1024"
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("context", type=Path)
@@ -28,7 +24,7 @@ def main() -> int:
         source = dict(context["source"])
         name = args.project_name or Path(source["video_path"]).stem
         plan = {
-            "schema_version": "0.1",
+            "schema_version": "0.2",
             "project": {"name": name, "created_at": now_iso()},
             "source": {
                 "video_path": source["video_path"], "video_sha256": source["video_sha256"],
@@ -37,10 +33,17 @@ def main() -> int:
                 "transcript_context_path": str(args.context.resolve())
             },
             "profile": {"name": args.profile, "visual_style": args.visual_style},
+            "broll_budget": {
+                "designed_for_video_sec": {"min": 120, "max": 180},
+                "max_total_broll": 8,
+                "max_generated_images": 5,
+                "min_broll_score": 12,
+            },
             "defaults": {
-                "image_size": default_image_size(int(source["width"]), int(source["height"])),
-                "image_quality": "medium", "image_model": "gpt-image-2-2026-04-21",
-                "motion_preset": "slow_push", "transition_sec": 0.12
+                "image_provider": "manual_chatgpt",
+                "generation_mode": "manual_chatgpt",
+                "target_aspect_ratio": "16:9" if int(source["width"]) > int(source["height"]) else "9:16" if int(source["height"]) > int(source["width"]) else "1:1",
+                "motion_preset": "slow_push", "transition_sec": 0.12,
             },
             "segments": [], "assets": [], "shots": [],
             "approval": {"status": "pending", "approved_shots": [], "confirmation": None, "approved_at": None},

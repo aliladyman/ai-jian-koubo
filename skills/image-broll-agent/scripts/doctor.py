@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-import importlib.util
-import os
 import shutil
 
 from broll_lib import find_parent_skill, load_skill_env, skill_root
@@ -36,11 +34,7 @@ def main() -> int:
         status(False, str(exc))
         failures += 1
 
-    key = os.environ.get("OPENAI_API_KEY", "").strip()
-    valid_key = bool(key and key != "your_openai_api_key")
-    status(valid_key, "OPENAI_API_KEY: 已配置" if valid_key else "OPENAI_API_KEY: 未配置")
-    failures += int(not valid_key)
-    status(True, f"图片模型: {os.environ.get('OPENAI_IMAGE_MODEL', 'gpt-image-2-2026-04-21')}")
+    status(True, "生图方式: 用户在 ChatGPT 内手工生成（无需 OpenAI API Key）")
     status((skill_root() / "SKILL.md").is_file(), f"Skill 入口: {skill_root() / 'SKILL.md'}")
 
     if failures:

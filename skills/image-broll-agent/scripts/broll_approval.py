@@ -17,9 +17,10 @@ def fingerprint_for(plan: dict[str, Any], shot: dict[str, Any]) -> str:
         "schema_version": plan.get("schema_version"),
         "source_video_sha256": plan.get("source", {}).get("video_sha256"),
         "profile": plan.get("profile"),
-        "segment": {key: segment.get(key) for key in ("segment_id", "source_unit_ids", "start_sec", "end_sec", "transcript_text", "route", "template_id", "evidence_required")},
-        "asset": {key: asset.get(key) for key in ("asset_id", "type", "prompt", "text_policy", "size", "quality", "model", "source_path", "graphic_spec", "output_name")},
-        "shot": {key: shot.get(key) for key in ("shot_id", "start_sec", "end_sec", "composition", "motion_preset", "transition_sec", "output_name")},
+        "broll_budget": plan.get("broll_budget"),
+        "segment": {key: segment.get(key) for key in ("segment_id", "source_unit_ids", "start_sec", "end_sec", "transcript_text", "route", "template_id", "evidence_required", "broll_score")},
+        "asset": {key: asset.get(key) for key in ("asset_id", "type", "prompt", "text_policy", "image_provider", "generation_mode", "target_aspect_ratio", "source_path", "graphic_spec", "output_name")},
+        "shot": {key: shot.get(key) for key in ("shot_id", "start_sec", "end_sec", "duration_class", "composition", "motion_preset", "transition_sec", "output_name")},
     }
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

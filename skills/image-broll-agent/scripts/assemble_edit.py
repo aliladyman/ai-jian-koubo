@@ -12,6 +12,7 @@ from pathlib import Path
 from broll_lib import (
     assert_execution_gate,
     has_audio,
+    indexed,
     load_json,
     media_summary,
     now_iso,
@@ -168,6 +169,17 @@ def main() -> int:
         }
         manifest_path = output.with_name("broll-edit-manifest.json")
         save_json(manifest_path, manifest)
+        assets = indexed(plan.get("assets", []), "asset_id")
+        inserted_at = now_iso()
+        for shot in shots:
+            shot["edit_status"] = "inserted"
+            shot["inserted_at"] = inserted_at
+            asset = assets.get(str(shot.get("asset_id")), {})
+            if asset.get("type") == "GENERATED_IMAGE":
+                asset["generation_status"] = "inserted"
+                asset["inserted_at"] = inserted_at
+                asset["inserted_output"] = str(output)
+        save_json(plan_path, plan)
         print(f"FINAL_EDIT_WRITTEN: {output}")
         print(f"EDIT_MANIFEST_WRITTEN: {manifest_path}")
         return 0

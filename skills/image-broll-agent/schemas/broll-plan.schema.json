@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/aliladyman/ai-jian-koubo/schemas/broll-plan.schema.json",
+  "title": "Image B-roll Agent Plan",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "project",
+    "source",
+    "profile",
+    "broll_budget",
+    "segments",
+    "assets",
+    "shots",
+    "approval",
+    "edit"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.2"},
+    "project": {
+      "type": "object",
+      "required": ["name", "created_at"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "created_at": {"type": "string", "minLength": 1}
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": ["video_path", "video_sha256", "duration_sec", "width", "height", "fps", "timebase", "transcript_provider"],
+      "properties": {
+        "video_path": {"type": "string", "minLength": 1},
+        "video_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+        "duration_sec": {"type": "number", "exclusiveMinimum": 0},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "fps": {"type": "number", "exclusiveMinimum": 0},
+        "timebase": {"const": "seconds"},
+        "transcript_provider": {"const": "volcengine"}
+      }
+    },
+    "profile": {
+      "type": "object",
+      "required": ["name", "visual_style"],
+      "properties": {
+        "name": {"enum": ["simple", "balanced", "rich"]},
+        "visual_style": {"type": "string", "minLength": 1}
+      }
+    },
+    "broll_budget": {
+      "type": "object",
+      "required": ["designed_for_video_sec", "max_total_broll", "max_generated_images", "min_broll_score"],
+      "properties": {
+        "designed_for_video_sec": {
+          "type": "object",
+          "required": ["min", "max"],
+          "properties": {
+            "min": {"type": "number", "exclusiveMinimum": 0},
+            "max": {"type": "number", "exclusiveMinimum": 0}
+          }
+        },
+        "max_total_broll": {"type": "integer", "minimum": 0, "maximum": 8},
+        "max_generated_images": {"type": "integer", "minimum": 0, "maximum": 5},
+        "min_broll_score": {"type": "integer", "minimum": 12, "maximum": 30}
+      }
+    },
+    "segments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["segment_id", "source_unit_ids", "start_sec", "end_sec", "transcript_text", "semantic_role", "broll_need", "broll_score", "speaker_dependency", "evidence_required", "route", "template_id", "route_reason", "shot_id"],
+        "properties": {
+          "segment_id": {"type": "string", "minLength": 1},
+          "source_unit_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+          "start_sec": {"type": "number", "minimum": 0},
+          "end_sec": {"type": "number", "exclusiveMinimum": 0},
+          "transcript_text": {"type": "string", "minLength": 1},
+          "semantic_role": {"enum": ["hook", "problem", "concept", "comparison", "process", "evidence", "example", "number", "emotion", "conclusion", "cta", "other"]},
+          "broll_need": {"type": "integer", "minimum": 0, "maximum": 3},
+          "broll_score": {"$ref": "#/$defs/broll_score"},
+          "speaker_dependency": {"enum": ["high", "medium", "low"]},
+          "evidence_required": {"type": "boolean"},
+          "route": {"enum": ["KEEP_A_ROLL", "REAL_EVIDENCE", "EXISTING_MEDIA", "DETERMINISTIC_GRAPHIC", "GENERATED_IMAGE"]},
+          "template_id": {"type": ["string", "null"]},
+          "route_reason": {"type": "string", "minLength": 1},
+          "shot_id": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/asset"}
+    },
+    "shots": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {"$ref": "#/$defs/shot"}
+    },
+    "approval": {
+      "type": "object",
+      "required": ["status", "approved_shots"],
+      "properties": {
+        "status": {"enum": ["pending", "partially_approved", "approved", "rejected"]},
+        "approved_shots": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "edit": {
+      "type": "object",
+      "required": ["enabled", "preserve_source_audio", "output_name"],
+      "properties": {
+        "enabled": {"const": true},
+        "preserve_source_audio": {"const": true},
+        "output_name": {"type": "string", "pattern": "\\.mp4$"}
+      }
+    }
+  },
+  "$defs": {
+    "broll_score": {
+      "type": "object",
+      "required": ["visual_value", "comprehension_gain", "rhythm_gain", "generation_cost", "total"],
+      "properties": {
+        "visual_value": {"type": "integer", "minimum": 0, "maximum": 10},
+        "comprehension_gain": {"type": "integer", "minimum": 0, "maximum": 10},
+        "rhythm_gain": {"type": "integer", "minimum": 0, "maximum": 10},
+        "generation_cost": {"type": "integer", "minimum": 0, "maximum": 10},
+        "total": {"type": "integer", "minimum": -10, "maximum": 30}
+      }
+    },
+    "asset": {
+      "type": "object",
+      "required": ["asset_id", "type", "status", "blocks_generation", "output_name"],
+      "properties": {
+        "asset_id": {"type": "string", "minLength": 1},
+        "type": {"enum": ["REAL_EVIDENCE", "EXISTING_MEDIA", "DETERMINISTIC_GRAPHIC", "GENERATED_IMAGE"]},
+        "status": {"enum": ["missing", "planned", "provided", "generated", "rejected"]},
+        "blocks_generation": {"type": "boolean"},
+        "output_name": {"type": "string", "pattern": "\\.(png|jpg|jpeg|webp)$"},
+        "source_path": {"type": ["string", "null"]},
+        "generated_path": {"type": ["string", "null"]},
+        "image_provider": {"const": "manual_chatgpt"},
+        "generation_mode": {"const": "manual_chatgpt"},
+        "generation_status": {"enum": ["planned", "prompt_ready", "waiting_user_generation", "user_generated", "qa_passed", "inserted", "rejected"]},
+        "target_aspect_ratio": {"enum": ["9:16", "16:9", "1:1"]},
+        "prompt": {"type": "string", "minLength": 1},
+        "text_policy": {"const": "no_text"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"type": {"const": "GENERATED_IMAGE"}}},
+          "then": {
+            "required": ["image_provider", "generation_mode", "generation_status", "target_aspect_ratio", "prompt", "text_policy"],
+            "not": {"anyOf": [{"required": ["provider"]}, {"required": ["model"]}, {"required": ["size"]}, {"required": ["quality"]}]}
+          }
+        }
+      ]
+    },
+    "shot": {
+      "type": "object",
+      "required": ["shot_id", "segment_id", "asset_id", "start_sec", "end_sec", "duration_sec", "duration_class", "composition", "motion_preset", "transition_sec", "approval", "qa_status", "edit_status", "output_name"],
+      "properties": {
+        "shot_id": {"type": "string", "minLength": 1},
+        "segment_id": {"type": "string", "minLength": 1},
+        "asset_id": {"type": "string", "minLength": 1},
+        "start_sec": {"type": "number", "minimum": 0},
+        "end_sec": {"type": "number", "exclusiveMinimum": 0},
+        "duration_sec": {"type": "number", "minimum": 2, "maximum": 12},
+        "duration_class": {"enum": ["short_point", "concept_explanation", "process_explanation", "chapter_transition"]},
+        "composition": {"const": "fullscreen_replace"},
+        "motion_preset": {"enum": ["static_hold", "slow_push", "slow_pull", "pan_left", "pan_right", "diagonal_push"]},
+        "transition_sec": {"type": "number", "minimum": 0, "maximum": 0.5},
+        "approval": {"enum": ["pending", "approved", "rejected"]},
+        "qa_status": {"enum": ["pending", "accepted", "rejected"]},
+        "edit_status": {"enum": ["pending", "inserted"]},
+        "output_name": {"type": "string", "pattern": "\\.mp4$"}
+      }
+    }
+  }
+}

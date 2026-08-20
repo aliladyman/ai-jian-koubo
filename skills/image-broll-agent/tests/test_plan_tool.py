@@ -47,7 +47,7 @@ def main() -> int:
             "--shots",
             "all",
             "--confirmation",
-            "CONFIRM_IMAGE_BROLL_COST",
+            "CONFIRM_BROLL_PLAN",
         )
         approved = load_json(plan_path)
         assert approved["approval"]["status"] == "approved"
@@ -94,10 +94,42 @@ def main() -> int:
             "--shots",
             "B001",
             "--confirmation",
-            "CONFIRM_IMAGE_BROLL_COST",
+            "CONFIRM_BROLL_PLAN",
             expected=2,
         )
         assert "missing assets" in result.stderr
+
+        over_budget = copy.deepcopy(reset)
+        over_budget["broll_budget"]["max_generated_images"] = 0
+        errors = validate_plan(over_budget, plan_path=plan_path, check_files=False)
+        assert any("manually generated images" in error for error in errors), errors
+
+        too_many_shots = copy.deepcopy(reset)
+        too_many_shots["broll_budget"]["max_total_broll"] = 1
+        errors = validate_plan(too_many_shots, plan_path=plan_path, check_files=False)
+        assert any("total shots" in error for error in errors), errors
+
+        low_score = copy.deepcopy(reset)
+        low_score["segments"][1]["broll_score"] = {
+            "visual_value": 3,
+            "comprehension_gain": 3,
+            "rhythm_gain": 2,
+            "generation_cost": 4,
+            "total": 4,
+        }
+        errors = validate_plan(low_score, plan_path=plan_path, check_files=False)
+        assert any("min_broll_score" in error for error in errors), errors
+
+        fixed_six_seconds = copy.deepcopy(reset)
+        fixed_six_seconds["shots"][0]["end_sec"] = fixed_six_seconds["shots"][0]["start_sec"] + 6
+        fixed_six_seconds["shots"][0]["duration_sec"] = 6
+        errors = validate_plan(fixed_six_seconds, plan_path=plan_path, check_files=False)
+        assert any("duration_class=short_point" in error for error in errors), errors
+
+        legacy_api = copy.deepcopy(reset)
+        legacy_api["assets"][1]["model"] = "gpt-image-2"
+        errors = validate_plan(legacy_api, plan_path=plan_path, check_files=False)
+        assert any("obsolete API fields" in error for error in errors), errors
 
     print("test_plan_tool passed")
     return 0

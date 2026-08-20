@@ -1,6 +1,6 @@
 ---
 name: AI剪口播
-description: 口播视频转录和口误识别。生成审查稿和删除任务清单。触发词：剪口播、处理视频、识别口误
+description: 口播视频转录和口误识别，生成审核页与 A 模式剪辑正本；A 模式导出后默认本地渲染干净口播并进入 Image B-roll 自动规划与可视化审核。触发词：剪口播、处理视频、识别口误
 ---
 
 # 剪口播 
@@ -50,6 +50,8 @@ output/YYYY-MM-DD_HH-MM_视频名/剪口播/
   6-7. 生成审核网页 + 启动服务器
   【等待用户确认】→ 网页点击「导出 FCPXML」→ 拖入剪映 / Final Cut Pro 完成剪辑
        （导出同时写 3_审核/review_log.json，供步骤 8 学习）
+       → 默认调用 image-broll-agent：本地渲染 FCPXML、重映射火山逐字稿、自动规划并打开 B-roll 审核页
+       → 只有用户明确说「只要 FCPXML / 手工剪辑」时才停在初剪交付
   8. 自进化学习（用户显式触发「已导出，学一下」）→ diff 抽规则 → 确认 → 写 经验规则.md
 
 模式 B（转字幕）:
@@ -265,6 +267,16 @@ bash "$SKILL_DIR/scripts/serve_review.sh" \
 > AI 初选 idx、用户最终 idx、切割参数，以及二者**词级 diff**（带文字+句子上下文）。
 > 这是步骤 8「自进化学习」的唯一原料，**不读 `.fcpxml`**（那是算完的时间线，丢失了词级选择）。
 
+> **导出后默认进入 Image B-roll 子步骤**，不再要求先去剪映 / Final Cut 渲染 clean-cut。加载本仓库的 `skills/image-broll-agent/SKILL.md`，然后执行：
+>
+> ```bash
+> BROLL_SKILL_DIR="<image-broll-agent 的实际安装目录>"
+> bash "$BROLL_SKILL_DIR/scripts/handoff_from_ai_jian_koubo.sh" \
+>   "$BASE_DIR/3_审核" --profile balanced --style clean_editorial --open-review
+> ```
+>
+> 交接脚本纯本地读取 FCPXML / review_log（有 receipt 时强校验），渲染已批准保留片段，并把已有火山逐字稿重映射到新时间轴；**不会再次调用 ASR，也不会调用图片 API**。成功后状态为 `awaiting_broll_approval`，必须等待用户在可视化审核页批准具体 shot，之后才导出 ChatGPT 手工生图 Prompt。只有用户明确说「只要 FCPXML / 我去手工剪」时跳过该子步骤。
+
 ### 步骤 8: 自进化学习（用户显式触发）
 
 > **不自动跑。** 用户导出后，在**任意会话**说「<项目> 已导出，学一下」之类，才执行本步。
@@ -326,4 +338,3 @@ VOLCENGINE_API_KEY=your_api_key_here
 去[新版控制台](https://console.volcengine.com/speech/new/overview)生成 **一个** API Key 即可——所有引擎共用这同一个 `VOLCENGINE_API_KEY`（均为新版控制台单 `X-Api-Key` 认证）。
 
 默认 `auto` 轮流模式会交替用极速版和标准版，**需同时开通两个资源**：「录音文件识别 - 极速版」（`volc.bigasr.auc_turbo`）+「录音文件识别 - 标准版」（`volc.bigasr.auc`）。两者各有 20h 免费额度、各自独立抵扣，轮流即可吃满 ≈40h。若只想/只开通了其中一个资源，加 `--flash` 或 `--v3-standard` 固定使用。
-

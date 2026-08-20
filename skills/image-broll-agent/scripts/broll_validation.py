@@ -10,7 +10,14 @@ from typing import Any
 from broll_core import (
     ASSET_STATUSES,
     ASSET_TYPES,
+    BROLL_BUDGET_LIMITS,
+    BROLL_SCORE_FIELDS,
+    DURATION_CLASSES,
+    EDIT_STATUSES,
+    GENERATION_MODES,
+    GENERATION_STATUSES,
     IMAGE_EXTENSIONS,
+    IMAGE_PROVIDERS,
     MOTION_PRESETS,
     PLAN_APPROVALS,
     PROFILES,
@@ -60,9 +67,31 @@ def _validate_graphic_spec(spec: Any, prefix: str) -> list[str]:
     return errors
 
 
+def _validate_broll_score(score: Any, prefix: str) -> tuple[list[str], int | None]:
+    errors: list[str] = []
+    if not isinstance(score, dict):
+        return [f"{prefix} must be an object"], None
+    values: dict[str, int] = {}
+    for field in BROLL_SCORE_FIELDS:
+        value = score.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 10:
+            errors.append(f"{prefix}.{field} must be an integer from 0 to 10")
+        else:
+            values[field] = value
+    total = score.get("total")
+    if not isinstance(total, int) or isinstance(total, bool):
+        errors.append(f"{prefix}.total must be an integer")
+        return errors, None
+    if len(values) == len(BROLL_SCORE_FIELDS):
+        expected = values["visual_value"] + values["comprehension_gain"] + values["rhythm_gain"] - values["generation_cost"]
+        if total != expected:
+            errors.append(f"{prefix}.total must equal visual_value + comprehension_gain + rhythm_gain - generation_cost ({expected})")
+    return errors, total
+
+
 def validate_plan(plan: dict[str, Any], *, plan_path: Path | None = None, check_files: bool = False) -> list[str]:
     errors: list[str] = []
-    required_top = ("schema_version", "project", "source", "profile", "segments", "assets", "shots", "approval", "edit")
+    required_top = ("schema_version", "project", "source", "profile", "broll_budget", "segments", "assets", "shots", "approval", "edit")
     for field in required_top:
         if field not in plan:
             errors.append(f"missing top-level field: {field}")
@@ -114,6 +143,37 @@ def validate_plan(plan: dict[str, Any], *, plan_path: Path | None = None, check_
         if not isinstance(profile.get("visual_style"), str) or not profile.get("visual_style", "").strip():
             errors.append("profile.visual_style must be non-empty")
 
+    budget = plan.get("broll_budget")
+    min_broll_score = 0
+    max_total_broll = 0
+    max_generated_images = 0
+    if not isinstance(budget, dict):
+        errors.append("broll_budget must be an object")
+        budget = {}
+    else:
+        designed = budget.get("designed_for_video_sec")
+        if not isinstance(designed, dict):
+            errors.append("broll_budget.designed_for_video_sec must be an object")
+        else:
+            designed_min = designed.get("min")
+            designed_max = designed.get("max")
+            if not isinstance(designed_min, (int, float)) or not isinstance(designed_max, (int, float)) or not 0 < float(designed_min) <= float(designed_max):
+                errors.append("broll_budget.designed_for_video_sec requires positive min <= max")
+        max_total_broll = budget.get("max_total_broll")
+        if not isinstance(max_total_broll, int) or isinstance(max_total_broll, bool) or not 0 <= max_total_broll <= BROLL_BUDGET_LIMITS["max_total_broll"]:
+            errors.append(f"broll_budget.max_total_broll must be an integer from 0 to {BROLL_BUDGET_LIMITS['max_total_broll']}")
+            max_total_broll = 0
+        max_generated_images = budget.get("max_generated_images")
+        if not isinstance(max_generated_images, int) or isinstance(max_generated_images, bool) or not 0 <= max_generated_images <= BROLL_BUDGET_LIMITS["max_generated_images"]:
+            errors.append(f"broll_budget.max_generated_images must be an integer from 0 to {BROLL_BUDGET_LIMITS['max_generated_images']}")
+            max_generated_images = 0
+        elif isinstance(max_total_broll, int) and max_generated_images > max_total_broll:
+            errors.append("broll_budget.max_generated_images cannot exceed max_total_broll")
+        min_broll_score = budget.get("min_broll_score")
+        if not isinstance(min_broll_score, int) or isinstance(min_broll_score, bool) or not 12 <= min_broll_score <= 30:
+            errors.append("broll_budget.min_broll_score must be an integer from 12 to 30")
+            min_broll_score = 0
+
     segments = plan.get("segments")
     if not isinstance(segments, list) or not segments:
         errors.append("segments must be a non-empty array")
@@ -158,6 +218,8 @@ def validate_plan(plan: dict[str, Any], *, plan_path: Path | None = None, check_
             errors.append(f"{prefix}.semantic_role is invalid")
         if segment.get("broll_need") not in {0, 1, 2, 3}:
             errors.append(f"{prefix}.broll_need must be 0..3")
+        score_errors, score_total = _validate_broll_score(segment.get("broll_score"), f"{prefix}.broll_score")
+        errors.extend(score_errors)
         if segment.get("speaker_dependency") not in SPEAKER_DEPENDENCIES:
             errors.append(f"{prefix}.speaker_dependency is invalid")
         if not isinstance(segment.get("evidence_required"), bool):
@@ -173,6 +235,8 @@ def validate_plan(plan: dict[str, Any], *, plan_path: Path | None = None, check_
                 errors.append(f"{prefix}.shot_id is required for B-roll routes")
             if segment.get("broll_need", 0) < 2:
                 errors.append(f"{prefix}.broll_need must be >= 2 when a B-roll route is selected")
+            if score_total is not None and score_total < min_broll_score:
+                errors.append(f"{prefix}.broll_score.total must be >= broll_budget.min_broll_score ({min_broll_score}) for a B-roll route")
         if route == "GENERATED_IMAGE" and segment.get("evidence_required") is True:
             errors.append(f"{prefix}: evidence_required content cannot use GENERATED_IMAGE")
         template_id = segment.get("template_id")
@@ -229,14 +293,39 @@ def validate_plan(plan: dict[str, Any], *, plan_path: Path | None = None, check_
                 errors.append(f"{prefix}.prompt is required for GENERATED_IMAGE")
             if asset.get("text_policy") != "no_text":
                 errors.append(f"{prefix}.text_policy must be no_text for GENERATED_IMAGE")
-            if not isinstance(asset.get("model"), str) or not asset.get("model", "").startswith("gpt-image-2"):
-                errors.append(f"{prefix}.model must be a pinned GPT Image 2 model")
-            if asset.get("size") not in {"1024x1024", "1024x1536", "1536x1024"}:
-                errors.append(f"{prefix}.size is invalid")
-            if asset.get("quality") not in {"low", "medium", "high"}:
-                errors.append(f"{prefix}.quality is invalid")
+            if asset.get("image_provider") not in IMAGE_PROVIDERS:
+                errors.append(f"{prefix}.image_provider must be manual_chatgpt")
+            if asset.get("generation_mode") not in GENERATION_MODES:
+                errors.append(f"{prefix}.generation_mode must be manual_chatgpt")
+            generation_status = asset.get("generation_status")
+            if generation_status not in GENERATION_STATUSES:
+                errors.append(f"{prefix}.generation_status is invalid")
+            if asset.get("target_aspect_ratio") not in {"9:16", "16:9", "1:1"}:
+                errors.append(f"{prefix}.target_aspect_ratio must be 9:16, 16:9, or 1:1")
+            obsolete = sorted(key for key in ("provider", "model", "size", "quality") if key in asset)
+            if obsolete:
+                errors.append(f"{prefix} contains obsolete API fields: {', '.join(obsolete)}")
             if source_path_value not in {None, ""}:
-                errors.append(f"{prefix}.source_path must be empty before/for generated assets; use generated_path")
+                errors.append(f"{prefix}.source_path must be empty for manually generated assets; use generated_path")
+            generated_path = asset.get("generated_path")
+            if generation_status in {"planned", "prompt_ready", "waiting_user_generation"}:
+                if asset.get("status") != "planned":
+                    errors.append(f"{prefix}.status must be planned before the user imports an image")
+                if generated_path not in {None, ""}:
+                    errors.append(f"{prefix}.generated_path must be empty before user generation")
+            elif generation_status in {"user_generated", "qa_passed", "inserted"}:
+                if asset.get("status") != "provided":
+                    errors.append(f"{prefix}.status must be provided after user generation")
+                if not isinstance(generated_path, str) or not generated_path.strip():
+                    errors.append(f"{prefix}.generated_path is required after user generation")
+                elif check_files and plan_path is not None:
+                    resolved = resolve_plan_path(plan_path, generated_path)
+                    if resolved is None or not resolved.is_file():
+                        errors.append(f"{prefix}.generated_path not found: {resolved}")
+            elif generation_status == "rejected" and asset.get("status") != "rejected":
+                errors.append(f"{prefix}.status must be rejected when generation_status=rejected")
+            if asset.get("blocks_generation") is not False:
+                errors.append(f"{prefix}.blocks_generation must be false for manual ChatGPT images")
         elif asset_type == "DETERMINISTIC_GRAPHIC":
             errors.extend(_validate_graphic_spec(asset.get("graphic_spec"), f"{prefix}.graphic_spec"))
         if asset.get("status") == "generated":
@@ -286,6 +375,13 @@ def validate_plan(plan: dict[str, Any], *, plan_path: Path | None = None, check_
             duration_value = shot.get("duration_sec")
             if not isinstance(duration_value, (int, float)) or abs(float(duration_value) - (end_value - start_value)) > 0.02:
                 errors.append(f"{prefix}.duration_sec must equal end_sec - start_sec")
+            duration_class = shot.get("duration_class")
+            if duration_class not in DURATION_CLASSES:
+                errors.append(f"{prefix}.duration_class is invalid")
+            elif isinstance(duration_value, (int, float)):
+                minimum, maximum = DURATION_CLASSES[duration_class]
+                if not minimum - 0.02 <= float(duration_value) <= maximum + 0.02:
+                    errors.append(f"{prefix}.duration_sec must be {minimum:g}..{maximum:g}s for duration_class={duration_class}")
         if shot.get("composition") != "fullscreen_replace":
             errors.append(f"{prefix}.composition must be fullscreen_replace")
         if shot.get("motion_preset") not in MOTION_PRESETS:
@@ -301,11 +397,22 @@ def validate_plan(plan: dict[str, Any], *, plan_path: Path | None = None, check_
             qa_hash = shot.get("qa_asset_sha256")
             if not isinstance(qa_hash, str) or len(qa_hash) != 64:
                 errors.append(f"{prefix}.qa_asset_sha256 is required after QA acceptance")
+            if asset and asset.get("type") == "GENERATED_IMAGE" and asset.get("generation_status") not in {"qa_passed", "inserted"}:
+                errors.append(f"{prefix}: accepted manual image must have generation_status=qa_passed or inserted")
+        if shot.get("edit_status") not in EDIT_STATUSES:
+            errors.append(f"{prefix}.edit_status is invalid")
+        elif shot.get("edit_status") == "inserted":
+            if shot.get("qa_status") != "accepted":
+                errors.append(f"{prefix}: inserted shot must have qa_status=accepted")
+            if shot.get("render_status") != "rendered":
+                errors.append(f"{prefix}: inserted shot must have render_status=rendered")
         output_name = shot.get("output_name")
         if not isinstance(output_name, str) or not output_name.lower().endswith(".mp4") or Path(output_name).name != output_name:
             errors.append(f"{prefix}.output_name must be an MP4 filename")
-        if shot.get("approval") == "approved" and shot.get("approval_fingerprint"):
-            if not approval_is_intact(plan, shot):
+        if shot.get("approval") == "approved":
+            if not shot.get("approval_fingerprint"):
+                errors.append(f"{prefix}.approval_fingerprint is required when approved")
+            elif not approval_is_intact(plan, shot):
                 errors.append(f"{prefix}.approval_fingerprint no longer matches the plan")
 
     shot_ranges.sort()
@@ -313,10 +420,37 @@ def validate_plan(plan: dict[str, Any], *, plan_path: Path | None = None, check_
         if current[0] < previous[1] - 1e-6:
             errors.append(f"overlapping shot ranges: {previous[2]} and {current[2]}")
 
+    for index, asset in enumerate(assets):
+        if not isinstance(asset, dict) or asset.get("type") != "GENERATED_IMAGE":
+            continue
+        prefix = f"assets[{index}]"
+        state = asset.get("generation_status")
+        related = [shot for shot in shots if isinstance(shot, dict) and str(shot.get("asset_id")) == str(asset.get("asset_id"))]
+        if not related:
+            errors.append(f"{prefix}: GENERATED_IMAGE must be referenced by a shot")
+            continue
+        if state in {"planned", "prompt_ready", "waiting_user_generation", "user_generated"}:
+            if any(shot.get("qa_status") == "accepted" or shot.get("edit_status") == "inserted" for shot in related):
+                errors.append(f"{prefix}: generation_status={state} cannot have accepted or inserted shots")
+        elif state == "qa_passed":
+            if any(shot.get("qa_status") != "accepted" for shot in related):
+                errors.append(f"{prefix}: generation_status=qa_passed requires every related shot to pass QA")
+        elif state == "inserted":
+            if any(shot.get("qa_status") != "accepted" for shot in related):
+                errors.append(f"{prefix}: generation_status=inserted requires every related shot to pass QA")
+            if not any(shot.get("edit_status") == "inserted" for shot in related):
+                errors.append(f"{prefix}: generation_status=inserted requires an inserted shot")
+
     for index, segment in enumerate(segments):
         shot_id = segment.get("shot_id") if isinstance(segment, dict) else None
         if shot_id and shot_id not in shot_ids:
             errors.append(f"segments[{index}].shot_id references unknown shot: {shot_id}")
+
+    if len(shots) > max_total_broll:
+        errors.append(f"broll budget allows at most {max_total_broll} total shots")
+    generated_image_count = sum(1 for asset in assets if isinstance(asset, dict) and asset.get("type") == "GENERATED_IMAGE")
+    if generated_image_count > max_generated_images:
+        errors.append(f"broll budget allows at most {max_generated_images} manually generated images")
 
     if profile_name in PROFILES and source_duration > 0:
         max_shots = math.ceil(source_duration / 60.0 * PROFILES[profile_name]["max_shots_per_minute"])

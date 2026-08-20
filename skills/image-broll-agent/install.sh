@@ -15,7 +15,8 @@ cp -R "$repo_dir" "$target_dir"
 python3 -m venv "$target_dir/.venv"
 "$target_dir/.venv/bin/python" -m pip install --upgrade pip
 "$target_dir/.venv/bin/python" -m pip install -r "$target_dir/requirements.txt"
-chmod +x "$target_dir/install.sh" "$target_dir/scripts/prepare_broll.sh" "$target_dir/scripts/validate.sh"
+chmod +x "$target_dir/install.sh" "$target_dir/scripts/prepare_broll.sh" \
+  "$target_dir/scripts/handoff_from_ai_jian_koubo.sh" "$target_dir/scripts/validate.sh"
 
 echo "✅ 已安装到: $target_dir"
-echo "接下来复制 .env.example 为 .env，并配置 OPENAI_API_KEY 与 AI_JIAN_KOUBO_DIR。"
+echo "接下来复制 .env.example 为 .env，并配置 AI_JIAN_KOUBO_DIR；ChatGPT 手工生图不需要 OpenAI API Key。"

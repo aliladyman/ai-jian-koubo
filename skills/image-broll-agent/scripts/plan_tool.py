@@ -42,7 +42,11 @@ def asset_ready(plan_path: Path, asset: dict) -> tuple[bool, str]:
         path = resolve_plan_path(plan_path, asset.get("source_path"))
         return (path is not None and path.is_file(), str(path))
     path = resolve_plan_path(plan_path, asset.get("generated_path"))
-    return (asset.get("status") == "generated" and path is not None and path.is_file(), str(path))
+    if asset_type == "GENERATED_IMAGE":
+        ready = asset.get("status") == "provided" and asset.get("generation_status") in {"user_generated", "qa_passed", "inserted"}
+    else:
+        ready = asset.get("status") == "generated"
+    return (ready and path is not None and path.is_file(), str(path))
 
 
 def review_markdown(plan: dict) -> str:
@@ -51,6 +55,7 @@ def review_markdown(plan: dict) -> str:
     segments_by_id = indexed(plan.get("segments", []), "segment_id")
     approval = plan.get("approval", {})
     generated_count = sum(1 for asset in plan.get("assets", []) if asset.get("type") == "GENERATED_IMAGE")
+    budget = plan.get("broll_budget", {})
     lines = [
         f"# {plan.get('project', {}).get('name', 'B-roll 方案')}",
         "",
@@ -59,7 +64,8 @@ def review_markdown(plan: dict) -> str:
         f"- Profile：`{plan.get('profile', {}).get('name', '')}` / `{plan.get('profile', {}).get('visual_style', '')}`",
         f"- 语义段落：{len(plan.get('segments', []))}",
         f"- B-roll 镜头：{len(plan.get('shots', []))}",
-        f"- GPT Image 2 付费图片：{generated_count}",
+        f"- B-roll 预算：最多 {budget.get('max_total_broll', 0)} 个；ChatGPT 手工生图最多 {budget.get('max_generated_images', 0)} 张",
+        f"- 当前 ChatGPT 手工生图任务：{generated_count}",
         f"- 审批状态：`{approval.get('status', 'pending')}`",
         f"- 已批准：{', '.join(approval.get('approved_shots', [])) or '无'}",
         "- 路由分布：" + "；".join(f"{key} {value}" for key, value in sorted(routes.items())),
@@ -78,10 +84,12 @@ def review_markdown(plan: dict) -> str:
             f"- 时间：{shot.get('start_sec', 0):.3f}–{shot.get('end_sec', 0):.3f} 秒",
             f"- 原文：{segment.get('transcript_text', '')}",
             f"- 语义：`{segment.get('semantic_role', '')}`；B-roll 需求 `{segment.get('broll_need', '')}`",
+            f"- 价值评分：`{segment.get('broll_score', {}).get('total', '')}`（门槛 `{budget.get('min_broll_score', '')}`）",
             f"- 路由：`{segment.get('route', '')}`",
             f"- 原因：{segment.get('route_reason', '')}",
             f"- 素材：`{asset.get('asset_id', '')}` / `{asset.get('type', '')}` / `{asset.get('status', '')}`",
             f"- 运镜：`{shot.get('motion_preset', '')}`；转场 {shot.get('transition_sec', 0):.2f}s",
+            f"- 时长类型：`{shot.get('duration_class', '')}`；实际 {shot.get('duration_sec', 0):.2f}s",
             f"- 审批：`{shot.get('approval', 'pending')}`；QA：`{shot.get('qa_status', 'pending')}`",
         ])
         if asset.get("description"):
@@ -89,7 +97,13 @@ def review_markdown(plan: dict) -> str:
         if asset.get("source_path"):
             lines.append(f"- 真实素材：`{asset.get('source_path')}`")
         if asset.get("prompt"):
-            lines.extend(["", "**GPT Image 2 提示词**", "", asset.get("prompt", "")])
+            lines.extend([
+                f"- 生图方式：`{asset.get('image_provider', '')}` / `{asset.get('generation_status', '')}`",
+                "",
+                "**复制到 ChatGPT 的生图提示词**",
+                "",
+                asset.get("prompt", ""),
+            ])
         if asset.get("graphic_spec"):
             lines.extend([
                 "",
@@ -108,10 +122,10 @@ def review_markdown(plan: dict) -> str:
         "明确批准镜头编号，例如：`批准 B001、B003`。Agent 随后执行：",
         "",
         "```bash",
-        "python3 scripts/plan_tool.py approve broll-plan.json --shots B001,B003 --confirmation CONFIRM_IMAGE_BROLL_COST",
+        "python3 scripts/plan_tool.py approve broll-plan.json --shots B001,B003 --confirmation CONFIRM_BROLL_PLAN",
         "```",
         "",
-        "“继续”“可以”“方案没问题”不等于付费生成批准。",
+        "批准后导出 Prompt；用户在 ChatGPT 内生图并保存为任务指定文件名，再运行导入脚本。",
     ])
     return "\n".join(lines) + "\n"
 
@@ -169,12 +183,33 @@ def main() -> int:
 
         if args.command == "reset":
             selected = set(parse_shot_selection(args.shots, all_ids))
+            selected_asset_ids = {
+                str(shot.get("asset_id"))
+                for shot in plan.get("shots", [])
+                if shot.get("shot_id") in selected
+            }
             for shot in plan.get("shots", []):
                 if shot.get("shot_id") in selected:
                     shot["approval"] = "pending"
                     shot["approval_fingerprint"] = None
                     shot["qa_status"] = "pending"
                     shot["qa_asset_sha256"] = None
+                    shot["render_status"] = "pending"
+                    shot["rendered_path"] = None
+                    shot["rendered_sha256"] = None
+                    shot["edit_status"] = "pending"
+            remaining_approved_assets = {
+                str(shot.get("asset_id"))
+                for shot in plan.get("shots", [])
+                if shot.get("shot_id") not in selected and shot.get("approval") == "approved"
+            }
+            for asset in plan.get("assets", []):
+                if asset.get("type") == "GENERATED_IMAGE" and str(asset.get("asset_id")) in selected_asset_ids - remaining_approved_assets:
+                    asset["status"] = "planned"
+                    asset["generation_status"] = "planned"
+                    asset["generated_path"] = None
+                    for field in ("prompt_ready_at", "prompt_exported_at", "imported_at", "imported_sha256", "imported_dimensions", "qa_passed_at", "inserted_at", "inserted_output"):
+                        asset.pop(field, None)
             approved_ids = [shot["shot_id"] for shot in plan.get("shots", []) if shot.get("approval") == "approved"]
             plan["approval"] = {
                 "status": "pending" if not approved_ids else "partially_approved",
@@ -234,6 +269,22 @@ def main() -> int:
                 else:
                     shot["qa_asset_sha256"] = None
                     asset["status"] = "rejected"
+                    if asset.get("type") == "GENERATED_IMAGE":
+                        asset["generation_status"] = "rejected"
+            affected_asset_ids = {
+                str(shots_by_id[shot_id].get("asset_id"))
+                for shot_id in selected_ids
+            }
+            for asset_id in affected_asset_ids:
+                asset = assets_by_id.get(asset_id, {})
+                if asset.get("type") != "GENERATED_IMAGE" or asset.get("generation_status") == "rejected":
+                    continue
+                related = [shot for shot in plan.get("shots", []) if str(shot.get("asset_id")) == asset_id]
+                if related and all(shot.get("qa_status") == "accepted" for shot in related):
+                    asset["generation_status"] = "qa_passed"
+                    asset["qa_passed_at"] = now_iso()
+                else:
+                    asset["generation_status"] = "user_generated"
             save_json(plan_path, plan)
             print(f"QA_{args.status.upper()}: " + ",".join(selected_ids))
             return 0
