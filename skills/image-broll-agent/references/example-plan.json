@@ -1,0 +1,155 @@
+{
+  "schema_version": "0.1",
+  "project": {
+    "name": "示例口播",
+    "created_at": "2026-08-20T00:00:00+00:00"
+  },
+  "source": {
+    "video_path": "/tmp/clean-cut.mp4",
+    "video_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "duration_sec": 60.0,
+    "width": 1080,
+    "height": 1920,
+    "fps": 30.0,
+    "timebase": "seconds",
+    "transcript_provider": "volcengine",
+    "transcript_context_path": "transcript-context.json"
+  },
+  "profile": {
+    "name": "balanced",
+    "visual_style": "clean_editorial"
+  },
+  "defaults": {
+    "image_size": "1024x1536",
+    "image_quality": "medium",
+    "image_model": "gpt-image-2-2026-04-21",
+    "motion_preset": "slow_push",
+    "transition_sec": 0.12
+  },
+  "segments": [
+    {
+      "segment_id": "S001",
+      "source_unit_ids": ["U0001"],
+      "start_sec": 0.0,
+      "end_sec": 4.0,
+      "transcript_text": "这是我真实使用后的判断。",
+      "semantic_role": "conclusion",
+      "broll_need": 0,
+      "speaker_dependency": "high",
+      "evidence_required": false,
+      "route": "KEEP_A_ROLL",
+      "template_id": "NONE",
+      "route_reason": "结论依赖真人可信度和语气",
+      "shot_id": null,
+      "aigc_disclosure_required": false
+    },
+    {
+      "segment_id": "S002",
+      "source_unit_ids": ["U0002", "U0003"],
+      "start_sec": 8.0,
+      "end_sec": 13.0,
+      "transcript_text": "Tool负责执行动作，Agent负责决定下一步。",
+      "semantic_role": "comparison",
+      "broll_need": 3,
+      "speaker_dependency": "low",
+      "evidence_required": false,
+      "route": "DETERMINISTIC_GRAPHIC",
+      "template_id": "I06_SPLIT_COMPARISON",
+      "route_reason": "双概念职责对比需要精确文字",
+      "shot_id": "B001",
+      "aigc_disclosure_required": false
+    },
+    {
+      "segment_id": "S003",
+      "source_unit_ids": ["U0004"],
+      "start_sec": 20.0,
+      "end_sec": 24.0,
+      "transcript_text": "AI Agent就像站在任务调度中心的项目经理。",
+      "semantic_role": "concept",
+      "broll_need": 2,
+      "speaker_dependency": "low",
+      "evidence_required": false,
+      "route": "GENERATED_IMAGE",
+      "template_id": "I08_CINEMATIC_METAPHOR",
+      "route_reason": "抽象概念适合用无字场景隐喻",
+      "shot_id": "B002",
+      "aigc_disclosure_required": true
+    }
+  ],
+  "assets": [
+    {
+      "asset_id": "A001",
+      "type": "DETERMINISTIC_GRAPHIC",
+      "status": "planned",
+      "blocks_generation": false,
+      "description": "Tool 与 Agent 左右职责对比",
+      "output_name": "A001.png",
+      "source_path": null,
+      "generated_path": null,
+      "graphic_spec": {
+        "kind": "split",
+        "title": "谁决定下一步",
+        "left": "Tool：执行动作",
+        "right": "Agent：决定下一步"
+      }
+    },
+    {
+      "asset_id": "A002",
+      "type": "GENERATED_IMAGE",
+      "status": "planned",
+      "blocks_generation": false,
+      "description": "AI 项目经理的任务调度中心隐喻",
+      "output_name": "A002.png",
+      "source_path": null,
+      "generated_path": null,
+      "prompt": "A cinematic editorial scene of an abstract AI project manager coordinating clear physical task modules in a calm operations room, one central figure-like silhouette, layered depth, restrained lighting, clean composition, vertical framing, subject inside the central 70% safe area. No readable text, no letters, no numbers, no logos, no watermark, no UI, no charts, no fake evidence.",
+      "text_policy": "no_text",
+      "model": "gpt-image-2-2026-04-21",
+      "size": "1024x1536",
+      "quality": "medium"
+    }
+  ],
+  "shots": [
+    {
+      "shot_id": "B001",
+      "segment_id": "S002",
+      "asset_id": "A001",
+      "start_sec": 8.5,
+      "end_sec": 12.0,
+      "duration_sec": 3.5,
+      "composition": "fullscreen_replace",
+      "motion_preset": "static_hold",
+      "transition_sec": 0.12,
+      "approval": "pending",
+      "approval_fingerprint": null,
+      "qa_status": "pending",
+      "output_name": "B001.mp4"
+    },
+    {
+      "shot_id": "B002",
+      "segment_id": "S003",
+      "asset_id": "A002",
+      "start_sec": 20.2,
+      "end_sec": 23.7,
+      "duration_sec": 3.5,
+      "composition": "fullscreen_replace",
+      "motion_preset": "slow_push",
+      "transition_sec": 0.12,
+      "approval": "pending",
+      "approval_fingerprint": null,
+      "qa_status": "pending",
+      "output_name": "B002.mp4"
+    }
+  ],
+  "approval": {
+    "status": "pending",
+    "approved_shots": [],
+    "confirmation": null,
+    "approved_at": null
+  },
+  "edit": {
+    "enabled": true,
+    "preserve_source_audio": true,
+    "output_name": "示例口播_with_broll.mp4"
+  }
+}
