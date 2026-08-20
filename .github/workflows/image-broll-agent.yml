@@ -1,0 +1,25 @@
+name: Validate Image B-roll Agent
+
+on:
+  push:
+    paths:
+      - "skills/image-broll-agent/**"
+      - ".github/workflows/image-broll-agent.yml"
+  pull_request:
+    paths:
+      - "skills/image-broll-agent/**"
+      - ".github/workflows/image-broll-agent.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install FFmpeg and CJK fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-noto-cjk
+      - name: Install Python dependencies
+        run: python3 -m pip install -r skills/image-broll-agent/requirements.txt
+      - name: Validate Skill
+        run: bash skills/image-broll-agent/scripts/validate.sh
