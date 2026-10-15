@@ -1,0 +1,4 @@
+interface:
+  display_name: "Image B-roll Agent"
+  short_description: "火山转写、语义路由、GPT Image 2 配图与自动回填"
+  default_prompt: "Use $image-broll-agent on a rendered clean talking-head video. Re-transcribe it with the parent AI剪口播 Volcengine pipeline, segment by semantic beats, route truth-sensitive content away from generation, create broll-plan.json and broll-review.md, require explicit shot approval, generate only approved GPT Image 2 assets, require image QA, render deterministic motion, and preserve the original speech while assembling the final edit."
