@@ -153,7 +153,7 @@ function checkEnv() {
   console.log(C.bold('\n[2/3] API Key 凭证'));
   const r = readKey();
   if (r.state === 'ok') {
-    console.log(`  ${OK} 找到 VOLCENGINE_API_KEY（${C.dim(r.key.slice(0, 8) + '…')}，来自 ${r.source}）`);
+    console.log(`  ${OK} 找到 VOLCENGINE_API_KEY（${C.dim('已设置，共 ' + r.key.length + ' 位，不显示内容')}，来自 ${r.source}）`);
     return r;
   }
   const msg = {

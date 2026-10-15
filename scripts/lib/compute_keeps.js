@@ -1,10 +1,10 @@
 /**
  * 切割算法单一来源（前后端共用）
  *
- * 输入「用户选中的删除段」，输出「实际保留片段 finalKeeps」。
- * 中间会做：合并相邻删除段 → 取反得保留段 → 边界向静音吸附 →
- * 保留段内部的长静音二次切割。这套逻辑过去内联在 review_server.js，
- * 现在抽出来让审核页前端也能实时预览到「真正会切到哪一帧」。
+ * 输入「用户明确选中的删除段」，输出「实际保留片段 finalKeeps」。
+ * 默认自然安全模式只做区间取反：黄色静音只是候选，不会在红色选区之外
+ * 自动吸附或二次切割。旧版静音吸附算法仍可通过
+ * preserveNaturalPauses:false 显式启用，供历史工程兼容。
  *
  * UMD：Node 用 require('./lib/compute_keeps')，浏览器用 <script> 后读 window.ComputeKeeps。
  */
@@ -14,8 +14,12 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  // 默认阈值（与历史 review_server.js 行为完全一致）
+  const ENGINE_VERSION = 'a-mode-explicit-v1';
+  const EPS = 1e-6;
+
+  // 默认使用自然安全模式；其余阈值只在显式兼容模式中生效。
   const DEFAULTS = {
+    preserveNaturalPauses: true,
     mergeGap: 0.15,          // 相邻删除段间距 < 此值则合并，吸收词级时间戳天然间隙
     minKeepDur: 0.1,         // 短于此的保留段无意义，丢弃
     lookBack: 0.6,           // 删除点前后多大窗口内寻找静音作为吸附切点
@@ -23,6 +27,54 @@
     edgeMargin: 0.05,        // 保留段边缘此范围内的静音不算「内部静音」
     minInternalSilence: 0.2, // 保留段内部 ≥ 此长度的静音会被二次切掉（换气/未识别停顿）
   };
+
+  function validInterval(seg) {
+    return seg && Number.isFinite(Number(seg.start)) && Number.isFinite(Number(seg.end));
+  }
+
+  function mergeDeleteSegments(deleteList, duration, mergeGap) {
+    const maxDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
+    const sorted = (deleteList || [])
+      .filter(validInterval)
+      .map(seg => ({
+        start: Math.max(0, Math.min(maxDuration, Number(seg.start))),
+        end: Math.max(0, Math.min(maxDuration, Number(seg.end))),
+      }))
+      .filter(seg => seg.end > seg.start + EPS)
+      .sort((a, b) => a.start - b.start || a.end - b.end);
+
+    const merged = [];
+    for (const seg of sorted) {
+      const last = merged[merged.length - 1];
+      if (!last || seg.start > last.end + mergeGap + EPS) {
+        merged.push({ start: seg.start, end: seg.end });
+      } else {
+        last.end = Math.max(last.end, seg.end);
+      }
+    }
+    return merged;
+  }
+
+  // 服务器与浏览器共用：只合并「token 序列中连续被选中」的词/静音。
+  // 未选中的 gap 会切断删除段，避免 UI 没标红、导出却把它吞掉。
+  function buildDeleteListFromSelection(words, selectedIndices) {
+    const selected = new Set((selectedIndices || []).map(Number).filter(Number.isInteger));
+    const out = [];
+    let cur = null;
+    for (let i = 0; i < (words || []).length; i++) {
+      const w = words[i];
+      const usable = validInterval(w) && Number(w.end) > Number(w.start) + EPS;
+      if (selected.has(i) && usable) {
+        if (!cur) cur = { start: Number(w.start), end: Number(w.end) };
+        else cur.end = Math.max(cur.end, Number(w.end));
+      } else if (cur) {
+        out.push(cur);
+        cur = null;
+      }
+    }
+    if (cur) out.push(cur);
+    return out;
+  }
 
   // 在 (rawStart, windowEnd] 内找最近的静音终点（最小 end），用于裁保留段开头
   function findNextSilenceEnd(periods, rawStart, windowEnd) {
@@ -49,7 +101,7 @@
    * @param {{start:number,end:number}[]} silencePeriods ffmpeg 检测的静音段
    * @param {number} duration 媒体总时长（秒）
    * @param {object} [opts] 覆盖默认阈值
-   * @returns {{start:number,end:number}[]} 实际保留片段（已吸附 + 内部二次切）
+   * @returns {{start:number,end:number}[]} 实际保留片段
    */
   function computeFinalKeeps(deleteList, silencePeriods, duration, opts) {
     const o = Object.assign({}, DEFAULTS, opts || {});
@@ -59,16 +111,21 @@
     const padEnd = (opts && opts.padEnd != null) ? opts.padEnd : o.padFrames;
     const periods = (silencePeriods || []).slice().sort((a, b) => a.start - b.start);
 
-    // 1) 合并删除段
-    const sorted = (deleteList || []).slice().sort((a, b) => a.start - b.start);
-    const merged = [];
-    for (const seg of sorted) {
-      const last = merged[merged.length - 1];
-      if (!last || seg.start > last.end + o.mergeGap) merged.push({ start: seg.start, end: seg.end });
-      else last.end = Math.max(last.end, seg.end);
+    // 自然安全模式：删除范围 = 红色明确选区；静音数据不参与实际切点。
+    const safeMode = o.preserveNaturalPauses !== false;
+    const merged = mergeDeleteSegments(deleteList, duration, safeMode ? 0 : o.mergeGap);
+    if (safeMode) {
+      const keeps = [];
+      let cursor = 0;
+      for (const del of merged) {
+        if (del.start > cursor + EPS) keeps.push({ start: cursor, end: del.start });
+        cursor = Math.max(cursor, del.end);
+      }
+      if (cursor < duration - EPS) keeps.push({ start: cursor, end: duration });
+      return keeps;
     }
 
-    // 2) 取反得保留段，并把边界吸附到最近静音
+    // 兼容模式：保留历史的静音吸附 + 内部静音二次切割行为。
     const keepSegments = [];
     let cursor = 0;
     for (const del of merged) {
@@ -143,5 +200,42 @@
     return cuts;
   }
 
-  return { computeFinalKeeps, keepsToCuts, intervalSubtract, DEFAULTS };
+  // 检查实际切掉的区间是否碰到了任何「未选中真词」。安全模式命中即应阻断导出。
+  function findUnselectedWordCutRisks(words, selectedIndices, finalKeeps, duration, tolerance) {
+    const selected = new Set((selectedIndices || []).map(Number).filter(Number.isInteger));
+    const cuts = keepsToCuts(finalKeeps || [], duration);
+    const tol = tolerance == null ? 1e-4 : Math.max(0, Number(tolerance));
+    const risks = [];
+    for (let i = 0; i < (words || []).length; i++) {
+      const w = words[i];
+      if (!w || w.isGap || selected.has(i) || !validInterval(w)) continue;
+      const ws = Number(w.start), we = Number(w.end);
+      for (const cut of cuts) {
+        const overlap = Math.min(cut.end, we) - Math.max(cut.start, ws);
+        if (overlap > tol) {
+          risks.push({
+            idx: i,
+            text: String(w.text || ''),
+            wordStart: ws,
+            wordEnd: we,
+            cutStart: cut.start,
+            cutEnd: cut.end,
+            overlap: Number(overlap.toFixed(6)),
+          });
+          break;
+        }
+      }
+    }
+    return risks;
+  }
+
+  return {
+    computeFinalKeeps,
+    keepsToCuts,
+    intervalSubtract,
+    buildDeleteListFromSelection,
+    findUnselectedWordCutRisks,
+    DEFAULTS,
+    ENGINE_VERSION,
+  };
 });

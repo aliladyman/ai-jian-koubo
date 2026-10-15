@@ -14,6 +14,9 @@ if (!fs.existsSync(inputFile)) {
   process.exit(1);
 }
 
+// 本地补丁 2026-07-21 · 转录来源守卫：逐字稿必须来自火山，绕道即停
+require('./lib/assert_asr_source').assertAsrSource(inputFile, 'gen_analysis.js');
+
 // 确保输出目录存在（recursive: true 本身幂等，无需 existsSync）
 fs.mkdirSync(outDir, { recursive: true });
 

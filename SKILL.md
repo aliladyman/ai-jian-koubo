@@ -1,6 +1,6 @@
 ---
 name: AI剪口播
-description: 口播视频转录和口误识别。生成审查稿和删除任务清单。触发词：剪口播、处理视频、识别口误
+description: 口播视频转录和口误识别，生成网页审核页，导出剪映主轨草稿 / FCPXML / MP4 / SRT 与 A 模式剪辑正本；导出后冻结文字源。触发词：剪口播、处理视频、识别口误、A 模式剪口播
 ---
 
 # 剪口播 
@@ -14,9 +14,9 @@ description: 口播视频转录和口误识别。生成审查稿和删除任务�
 
 ## 输出目录结构
 
-**模式 A（剪口播）：**
+**模式 A（剪口播）：** 一片一夹约定 — 产物落在源片所在文件夹的 `剪口播/` 下（`<片子文件夹>/剪口播/`）。建议每条视频一个文件夹，源片放在里面。
 ```
-output/YYYY-MM-DD_HH-MM_视频名/剪口播/
+<源片所在文件夹>/剪口播/
 ├── 1_转录/   audio.mp3 · volcengine_v3_result.json · subtitles_words.json
 ├── 2_分析/   analysis.txt · sentence_map.json · speech_errors.json · auto_selected.json
 └── 3_审核/   review.html · audio.mp3 · data.json · silence_periods.json
@@ -48,8 +48,10 @@ output/YYYY-MM-DD_HH-MM_视频名/剪口播/
   5.5 AI 逐句扫剩余词级口癖（B2/B3/B4，脚本覆盖不到的部分）
   5.6 merge_selections.js
   6-7. 生成审核网页 + 启动服务器
-  【等待用户确认】→ 网页点击「导出 FCPXML」→ 拖入剪映 / Final Cut Pro 完成剪辑
-       （导出同时写 3_审核/review_log.json，供步骤 8 学习）
+  【等待用户确认】→ 网页点击「导出 FCPXML」→ 初剪定稿
+       → 导出同时提交 FCPXML + review_log.json + rough-cut-export.receipt.json
+       → receipt 绑定两个产物与逐字稿指纹；任一缺失或不匹配都不算初剪完成
+       → 交给剪映 / Final Cut Pro 继续加字幕、包装（或接你自己的下游流程）
   8. 自进化学习（用户显式触发「已导出，学一下」）→ diff 抽规则 → 确认 → 写 经验规则.md
 
 模式 B（转字幕）:
@@ -108,7 +110,7 @@ node "$SKILL_DIR/scripts/doctor.js"
 
 ```
 📹 视频：/path/to/视频.mp4
-📁 输出：~/Desktop/output/YYYY-MM-DD_HH-MM_视频名/剪口播/
+📁 输出：<源片所在文件夹>/剪口播/   （一片一夹约定：产物落在源片旁边）
 
 请选择模式：
   [A] 剪口播 — 识别口误 → 网页审核 → 导出 FCPXML 给剪映 / FCP
@@ -119,10 +121,24 @@ node "$SKILL_DIR/scripts/doctor.js"
 
 ### 步骤 1-4: 一键转录流水线（无需 AI）
 
+> **硬规则 · 转录引擎（代码层已有守卫）**
+>
+> 1. **逐字稿只能来自火山引擎**（`run_transcribe.sh`，产物 `volcengine_v3_result.json`）。**禁止**用 whisper 或任何其他 ASR 的结果转成 `subtitles_words.json` 塞进本流水线——格式对不代表来源对。
+> 2. **转录失败必须停下报告用户**，说明失败原因（先跑 `node scripts/doctor.js --force` 确认是 key、资源还是网络问题），**不得自行寻找替代引擎继续往下跑**。
+> 3. 用户**确认后**可以用替代引擎，但必须由用户认可后在 `1_转录/` 写 `.asr_override.json`（含 `engine` / `reason` / `confirmedAt` 三个字段）显式放行；agent 不得自行创建该文件绕过检查。放行后流水线仍会打印醒目告警，审核页需逐句核对——替代引擎的专名/术语错字率明显更高。
+>
+> 守卫实现：`scripts/lib/assert_asr_source.js`，由 `gen_analysis.js` 与 `generate_review.js` 在消费逐字稿前调用，缺火山产物即 fail closed。
+>
+> 为什么这么严：实际发生过——转录被 agent 自行换成本地 whisper，全程无报错，成片里「晨报」被识别成「承报」6 处，直到看成片才发现。
+
 ```bash
 SKILL_DIR="<本 skill 的安装目录>"   # 见上方「路径约定」
 VIDEO_PATH="/path/to/视频.mp4"
-BASE_DIR="$HOME/Desktop/output/$(date +%Y-%m-%d_%H-%M)_$(basename "$VIDEO_PATH" | sed 's/\.[^.]*$//')/剪口播"
+# 一片一夹约定：产物落在源片所在文件夹的 剪口播/ 下，
+# 便于「源片+产物」同处、源片不挪窝、批量按文件夹扫。
+BASE_DIR="$(dirname "$VIDEO_PATH")/剪口播"
+# 兜底：若源片没有放在自己的片子文件夹里（如临时放在 Downloads），
+# 产物会落在源片旁边；建议先给每条视频建一个文件夹再跑。
 
 bash "$SKILL_DIR/scripts/run_transcribe.sh" "$VIDEO_PATH" "$BASE_DIR"
 # 输出: BASE_DIR/1_转录/{audio.mp3, volcengine_v3_result.json, subtitles_words.json}
@@ -216,7 +232,7 @@ node "$SKILL_DIR/scripts/gen_word_detail.js" \
   5 8 12 24 25 44 ...
 ```
 
-**判断尺度**：句子已经能读通就不要再动。剪口播的容错来自审核网页（用户能取消勾选），但**误删比漏删难恢复**——用户得手动取消勾选才能找回。所以**漏删优于过删**。
+**判断尺度**：句子已经能读通就不要再动。剪口播的容错来自审核网页（用户能取消勾选），但**误删比漏删难恢复**——用户得手动取消勾选才能找回。所以**漏删优于过删**。追加删除语境依赖词（就是 / 那个 / 对 / 所以 / 其实等；"然后"已被 5.4 脚本全删，无需再扫）时，必须过 `规则.md` C 节的四判据——只有判成无功能垫话才删。
 
 #### 5.6 合并到 auto_selected（代码自动映射句号→idx）
 
@@ -226,6 +242,16 @@ node "$SKILL_DIR/scripts/merge_selections.js" \
   "$BASE_DIR/2_分析/speech_errors.json" \
   "$BASE_DIR/2_分析/auto_selected.json"
 ```
+
+#### 5.7 参考稿存活自检（可选——用户主动提供了参考稿才做，没提供不问、不设门，直接跳过）
+
+> 有参考稿时（如提词器里的逐字稿），把稿子当 ground truth 做一次防过剪自检。稿子是"应该说的话"，实录会有即兴改词——按语义对应核对，不逐字比对。
+
+1. 参考稿存 `2_分析/script.txt`
+2. 对照删除结果核对：**参考稿的每一句，在保留内容里应恰好存活一次**
+3. 稿中某句在保留内容里消失 → 疑似过剪（常见于修辞性复述被误判 retake，见 规则.md A1），从 `delete_sentences` 移除对应句
+4. 稿中某句存活两次以上 → 疑似漏删的重复 retake，按 A1 四步验证后再决定是否补删
+5. 本步只修正 AI 初选；最终裁决仍在步骤 6-7 网页审核。拿不准的保留（漏删优于过删）
 
 ### 步骤 6-7: 生成审核数据并启动服务器
 
@@ -259,20 +285,55 @@ bash "$SKILL_DIR/scripts/serve_review.sh" \
 >
 > 服务器启动时会把地址写进 `3_审核/server_url.txt`、进程号写进 `.review_server.pid`，方便排障。
 
-用户在网页中：播放片段确认 → 勾选/取消 → 点击「导出 FCPXML」→ 生成的 `*_cut.fcpxml` 拖入剪映或 Final Cut Pro 完成最终剪辑。
+用户在网页中：播放片段确认 → 勾选/取消 → 点击「导出 FCPXML」→ 生成 `*_cut.fcpxml`（初剪定稿）。
 
-> **导出时服务器同时写一份 `3_审核/review_log.json`**（与 FCPXML 同一次点击产出）：记录
-> AI 初选 idx、用户最终 idx、切割参数，以及二者**词级 diff**（带文字+句子上下文）。
+> **A 模式句尾安全规则（默认且不可静默降级）**：审核页采用「只删红色明确选区」。
+> 黄色静音只是候选；顶栏静音阈值只负责批量勾成红色，未标红的字、gap 和自然停顿不得被
+> 静音吸附或内部静音算法自动切掉。服务端必须按 `finalSelected` 重建删除段，并检查实际切口
+> 是否碰到未选中的真词；命中即阻止导出。FCPXML 边界按源视频真实 fps 向外取整（开头 floor、
+> 结尾 ceil），宁可多留不足一帧，不向内截断尾字。`preserveNaturalPauses:false` 只用于显式
+> 兼容旧工程，不得作为 A 模式默认值。已有 `3_审核/review.html` 是生成时快照；要看到新说明需
+> 重跑步骤 6，不能手改快照代替模板更新。
+
+> **停顿四类判据**：每个 gap 先标 `natural-boundary / thinking-hesitation /
+> retake-boundary / abnormal-silence`，再决定保留或压缩。自然断句保留 0.3–0.5s；思考停顿
+> 只有在不改变语气、情绪与句法时才压缩；重录边界随失败版本删除；异常长静音压到约 0.3s。
+> 所有类别都只能使用源片真实存在的静音，不得制造不存在的停顿。
+>
+> **置信分层**：`auto-safe` 仅限规则命中且切点不碰真词；`review-required` 包含语义依赖、
+> 句首起音接近切点、短句重复、跨意图候选；`must-keep` 包含独有铺垫、修辞反问、引用/举例
+> 中的口癖词与任何拿不准项。人工批准另记，不覆盖算法 confidence。
+>
+> **切点可解释性**：审核页和 `review_log.json` 对每个建议删除段记录来源规则、停顿类别、
+> 删除前后时长、相邻保留词 id 与实际源帧边界。导出继续执行句尾保护，并增加“首音未被削掉”
+> 检查：切点不得进入相邻保留词 `[startMs,endMs]`；命中即阻断，不靠听感猜测放行。
+>
+> **交付前四检**：① 无保留词被切口覆盖；② 连续听 3–5 个真实拼接点，句首辅音/爆破音完整；
+> ③ 重录失败版未残留、不同意图未拼接；④ 长停顿已按四类处理且没有被清零。检查结果写入
+> `review_log.json.acceptance`；缺项时不得把 FCPXML 报告为初剪定稿。
+
+> **导出后**：先验证导出 receipt 与文字正本，再交给剪辑软件或你自己的下游流程。需要按剪后时间轴拿到逐句文字时，用附带的 `scripts/captions/build_cut_timeline.js`（读 `*_cut.fcpxml + review_log.json`）。
+
+> **导出时服务器成套提交 `*_cut.fcpxml + review_log.json + rough-cut-export.receipt.json`**：receipt 最后写入，绑定 FCPXML、文字正本与逐字稿 SHA-256；任何一个文件写失败、被单独替换或缺失时，API 不返回成功，下游也必须 fail closed。`review_log.json` 记录
+> AI 初选 idx、用户最终 idx、有效切割参数、源 fps、实际保留段、句尾保护检查，以及二者
+> **词级 diff**（带文字+句子上下文）。
 > 这是步骤 8「自进化学习」的唯一原料，**不读 `.fcpxml`**（那是算完的时间线，丢失了词级选择）。
+> 同一文件的 `textAuthority` 还要冻结：逐字稿 SHA-256、最终删除的词级 idx、导出当时的全局/片内纠错词典。下游字幕、敏感词检测与分镜文字必须同时消费 `*_cut.fcpxml + review_log.json`；FCPXML 的向外取整只保护声音，不能让已经删除的词在字幕里复活。
+
+### 页面导出 MP4（初剪视频）
+
+审核页点击「导出 MP4」，按点击时的红色选区在本机生成 H.264/AAC MP4；保留原画幅和原声，不烧录字幕、不添加 B-roll。页面显示生成状态，完成后提供下载链接；本地文件保存在 `3_审核/`，文件名含唯一标识，避免覆盖以前的视频。无删除选区时导出完整视频，全删时拒绝导出。
+
+MP4 使用服务端 `buildFcpxml` 的 `finalKeeps` 与同一尾字保护检查；成功后仍成套提交 FCPXML、文字正本和导出回执。MP4 是初剪交付，不代表完成分镜或正式成片验收。需要本机已有 ffmpeg/ffprobe，渲染失败在页面显示错误，可重试。模板更新后，旧审核页需要重新生成，并重新启动审核服务才生效。
 
 ### 步骤 8: 自进化学习（用户显式触发）
 
 > **不自动跑。** 用户导出后，在**任意会话**说「<项目> 已导出，学一下」之类，才执行本步。
 > 本步只读文件、不依赖对话上下文还在，所以冷会话也能跑。
 
-1. **定位日志**：单个项目读 `<project>/剪口播/3_审核/review_log.json`；
-   批量重学则 glob `~/Desktop/output/*/剪口播/3_审核/review_log.json`，逐个汇总。
-   （日志只存在项目里，清理 output 会丢语料。）
+1. **定位日志**：单个项目读 `<片子文件夹>/剪口播/3_审核/review_log.json`；
+   批量重学则 glob `<你的视频根目录>/*/剪口播/3_审核/review_log.json`，逐个汇总。
+   （日志只存在片子文件夹里，删片子文件夹会丢语料。）
 2. **读现有规则**：先读 `用户习惯/经验规则.md` **全文** + `用户习惯/规则.md`，避免重复提已有规则。
 3. **看 diff 抽规则**：对每条 `diff.aiOnly`（AI 想删你留回，可能过删）和 `diff.userOnly`
    （你删了 AI 没想到，可能漏删），对比「AI 为何这么剪 vs 你为何这么剪」，
@@ -327,3 +388,27 @@ VOLCENGINE_API_KEY=your_api_key_here
 
 默认 `auto` 轮流模式会交替用极速版和标准版，**需同时开通两个资源**：「录音文件识别 - 极速版」（`volc.bigasr.auc_turbo`）+「录音文件识别 - 标准版」（`volc.bigasr.auc`）。两者各有 20h 免费额度、各自独立抵扣，轮流即可吃满 ≈40h。若只想/只开通了其中一个资源，加 `--flash` 或 `--v3-standard` 固定使用。
 
+
+
+---
+
+## 推荐下一步
+
+| 当发现… | 推荐 | 话术 |
+|--------|------|------|
+| 已在审核网页导出剪映主轨草稿 | 剪映 | "初剪已锁，在剪映首页打开新草稿，接着加字幕和包装。" |
+| 用 Final Cut Pro 或其他剪辑软件 | 导出 FCPXML（通用） | "把 fcpxml 拖入剪辑软件继续。" |
+| 审查时发现是稿子本身的结构问题 | 改稿重录 | "这不是剪辑能救的，建议改稿再重录。" |
+
+
+## 剪映主轨交付
+
+剪映 11.3.0 实测：FCPXML 的 asset-clip（含显式 lane=0）、clip/video 导入后仍落在附加轨。画面可播放不代表主轨识别成功；删除 library@location 不是主轨修复。
+
+- 用户要在剪映继续加工时，审核页优先点「导出剪映主轨」。服务端 POST /api/jianying 复用同一次 finalKeeps、帧率和句尾检查，写入一个全新本地原生草稿，视频轨 flag=0。FCPXML、文字正本和原有回执仍一起生成。
+- 默认 macOS 草稿目录通过 os.homedir() 推导；其他目录使用 JIANYING_DRAFT_ROOT。目录不存在时明确失败，不静默回退为已知会落附加轨的 FCPXML。
+- 剪映首页打开返回的草稿名；列表未刷新时正常退出并重开剪映。不要再把配套 FCPXML 导入剪映作为主轨交付。
+- 每次导出创建新草稿，不改已打开或已编辑草稿。每次落盘生成独立 receipt，guiVerified=false；实际打开后检查主轨位置、开中尾画面和总时长，不能把写入成功当 GUI 验收。
+- 原生草稿只覆盖单条口播视频的帧对齐初剪。通用 FCPXML 仍可导出，但不能承诺所有剪映版本的主轨兼容。
+- 不单独按 V（会停用片段）；不自动触发智能包装上传或付费处理。
+- 回归：node --test scripts/tests/jianying.test.js scripts/tests/a_mode_tail_guard.test.js

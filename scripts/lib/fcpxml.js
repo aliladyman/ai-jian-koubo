@@ -12,8 +12,8 @@
  */
 
 const path = require('path');
-const { execSync } = require('child_process');
-const { computeFinalKeeps } = require('./compute_keeps');
+const { execFileSync } = require('child_process');
+const { computeFinalKeeps, ENGINE_VERSION } = require('./compute_keeps');
 
 // 把绝对路径编码成 file:// URI（保留路径分隔符与安全字符，其余百分号编码）
 function fileUri(absPath) {
@@ -31,26 +31,88 @@ function uuid() {
   });
 }
 
-// 用 ffprobe 探测视频元数据：时长、帧率（有理数）、宽高
+function ffprobeJson(videoFile) {
+  const args = [
+    '-v', 'error',
+    '-select_streams', 'v:0',
+    '-show_entries', 'format=duration:stream=r_frame_rate,width,height',
+    '-of', 'json',
+    videoFile,
+  ];
+
+  let lastError;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      return JSON.parse(execFileSync('ffprobe', args, {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }));
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  const stderr = lastError && lastError.stderr
+    ? String(lastError.stderr).trim()
+    : '';
+  throw new Error(`ffprobe 无法读取源视频「${videoFile}」${stderr ? `：${stderr}` : ''}`);
+}
+
+// 用一次 ffprobe 探测视频元数据：时长、帧率（有理数）、宽高
 function probeVideo(videoFile) {
-  const duration = parseFloat(
-    execSync(`ffprobe -v error -show_entries format=duration -of csv=p=0 "file:${videoFile}"`).toString().trim()
-  );
-
-  // 帧率为有理数，如 "30000/1001" = 29.97fps
-  const fpsRaw = execSync(
-    `ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 "file:${videoFile}"`
-  ).toString().trim().replace(/,+$/, '');
-  const fpsParts = fpsRaw.split('/').map(Number);
+  const metadata = ffprobeJson(videoFile);
+  const stream = Array.isArray(metadata.streams) ? metadata.streams[0] : null;
+  const duration = Number(metadata.format && metadata.format.duration);
+  const fpsRaw = stream && stream.r_frame_rate;
+  const fpsParts = typeof fpsRaw === 'string' ? fpsRaw.split('/').map(Number) : [];
   const [fpsNum, fpsDen] = fpsParts.length === 2 ? fpsParts : [fpsParts[0], 1];
+  const width = Number(stream && stream.width);
+  const height = Number(stream && stream.height);
 
-  const sizeRaw = execSync(
-    `ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "file:${videoFile}"`
-  ).toString().trim().split(',');
-  const width = parseInt(sizeRaw[0]) || 1920;
-  const height = parseInt(sizeRaw[1]) || 1080;
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error(`ffprobe 未返回有效视频时长：${videoFile}`);
+  }
+  if (!Number.isFinite(fpsNum) || fpsNum <= 0 || !Number.isFinite(fpsDen) || fpsDen <= 0) {
+    throw new Error(`ffprobe 未返回有效视频帧率：${videoFile}`);
+  }
+  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+    throw new Error(`ffprobe 未返回有效视频尺寸：${videoFile}`);
+  }
 
   return { duration, fpsNum, fpsDen, width, height };
+}
+
+// 保留段向外取整到源视频真实帧：开头 floor、结尾 ceil。
+// 目标是宁可多留不足一帧，也不把句尾最后一个字向内截断。
+function quantizeSegmentOutward(seg, fpsNum, fpsDen, duration) {
+  const frameRate = fpsNum / fpsDen;
+  const maxEndFrame = Math.max(1, Math.ceil(duration * frameRate - 1e-9));
+  const startFrame = Math.max(0, Math.min(maxEndFrame, Math.floor(seg.start * frameRate + 1e-9)));
+  const endFrame = Math.max(startFrame + 1, Math.min(maxEndFrame, Math.ceil(seg.end * frameRate - 1e-9)));
+  if (endFrame <= startFrame) return null;
+  return {
+    start: startFrame / frameRate,
+    end: endFrame / frameRate,
+    startFrame,
+    endFrame,
+  };
+}
+
+// 两段向外取整后若重叠/相接，直接连成一段。短到不足一帧的删除宁可放弃，
+// 也不制造重复帧、卡音或半个尾字。
+function mergeQuantizedKeeps(segments) {
+  const out = [];
+  for (const seg of segments) {
+    if (!seg) continue;
+    const last = out[out.length - 1];
+    if (!last || seg.startFrame > last.endFrame) {
+      out.push({ ...seg });
+    } else {
+      last.endFrame = Math.max(last.endFrame, seg.endFrame);
+      last.end = Math.max(last.end, seg.end);
+    }
+  }
+  return out;
 }
 
 /**
@@ -65,29 +127,29 @@ function probeVideo(videoFile) {
 function buildFcpxml({ videoFile, deleteList, silencePeriods, cutOpts }) {
   const { duration, fpsNum, fpsDen, width, height } = probeVideo(videoFile);
 
-  // ticks = 帧号 × fpsDen，分母为 fpsNum：对 29.97/30/24 等所有帧率都成立
-  const toFCPTicks = (sec) => Math.round(sec * fpsNum / fpsDen) * fpsDen;
+  // ticks = 帧号 × fpsDen，分母为 fpsNum：对 14.985/29.97/30/24 等帧率都成立
   const frameDuration = `${fpsDen}/${fpsNum}s`;
 
-  // 切割算法单一来源：合并删除段 → 取反 → 边界吸附静音 → 内部长静音二次切
-  const finalKeeps = computeFinalKeeps(deleteList, silencePeriods, duration, cutOpts);
+  // 先按选择得到保留段，再向外取到真实源帧。任何不足一帧的删除会被安全合并为保留。
+  const requestedKeeps = computeFinalKeeps(deleteList, silencePeriods, duration, cutOpts);
+  const finalKeeps = mergeQuantizedKeeps(
+    requestedKeeps.map(seg => quantizeSegmentOutward(seg, fpsNum, fpsDen, duration))
+  );
 
   const baseName = path.basename(videoFile, path.extname(videoFile));
   const outputPath = path.resolve(`${baseName}_cut.fcpxml`);
 
   const videoSrc = fileUri(path.resolve(videoFile));
-  const fcpxmlSrc = fileUri(outputPath);
 
-  // asset 时长用音频采样率（48000）做分母
-  const audioRate = 48000;
-  const assetDurationNum = Math.round(duration * audioRate);
+  // asset 时长也向上取到完整源帧，避免最后一帧的 clip 超出声明时长。
+  const assetDurationTicks = Math.ceil(duration * fpsNum / fpsDen - 1e-9) * fpsDen;
 
   // 每个保留片段一个 asset-clip，引用同一个 asset r1；
   // offset 在 tick 空间累加，避免浮点秒累积误差导致 ±1 帧偏移
   let timelineOffsetTicks = 0;
   const clips = finalKeeps.map((seg) => {
-    const startTicks = toFCPTicks(seg.start);
-    const durTicks = toFCPTicks(seg.end - seg.start);
+    const startTicks = seg.startFrame * fpsDen;
+    const durTicks = (seg.endFrame - seg.startFrame) * fpsDen;
     const offsetTicks = timelineOffsetTicks;
     timelineOffsetTicks += durTicks;
     return `            <asset-clip name="${baseName}" offset="${offsetTicks}/${fpsNum}s" ref="r1" start="${startTicks}/${fpsNum}s" duration="${durTicks}/${fpsNum}s" audioRole="dialogue" format="r2" tcFormat="NDF" />`;
@@ -95,13 +157,15 @@ function buildFcpxml({ videoFile, deleteList, silencePeriods, cutOpts }) {
 
   const totalTicks = timelineOffsetTicks;
 
+  // 不写 library@location：审核页会把服务器生成的 XML 下载到浏览器下载目录，
+  // 原绝对路径会随复制/下载立即失效，并可能误导剪映等第三方导入器。
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <fcpxml version="1.8">
   <resources>
     <format id="r2" frameDuration="${frameDuration}" width="${width}" height="${height}" colorSpace="1-1-1 (Rec. 709)" />
-    <asset id="r1" name="${baseName}" src="${videoSrc}" start="0/1s" duration="${assetDurationNum}/${audioRate}s" format="r2" hasAudio="1" hasVideo="1" audioSources="1" audioChannels="2" audioRate="48k" />
+    <asset id="r1" name="${baseName}" src="${videoSrc}" start="0/1s" duration="${assetDurationTicks}/${fpsNum}s" format="r2" hasAudio="1" hasVideo="1" audioSources="1" audioChannels="2" audioRate="48k" />
   </resources>
-  <library location="${fcpxmlSrc}">
+  <library>
     <event name="${baseName}_剪辑" uid="${uuid()}">
       <project name="${baseName}_cut" uid="${uuid()}">
         <sequence duration="${totalTicks}/${fpsNum}s" format="r2" tcStart="0/1s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
@@ -114,7 +178,28 @@ ${clips}
   </library>
 </fcpxml>`;
 
-  return { xml, outputPath, finalKeeps, baseName };
+  return {
+    xml,
+    outputPath,
+    requestedKeeps,
+    finalKeeps,
+    baseName,
+    engineVersion: ENGINE_VERSION,
+    mediaMeta: {
+      duration,
+      fpsNum,
+      fpsDen,
+      fps: fpsNum / fpsDen,
+      width,
+      height,
+      frameAlignedDuration: assetDurationTicks / fpsNum,
+    },
+  };
 }
 
-module.exports = { buildFcpxml };
+module.exports = {
+  buildFcpxml,
+  probeVideo,
+  quantizeSegmentOutward,
+  mergeQuantizedKeeps,
+};

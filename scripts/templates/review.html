@@ -109,6 +109,12 @@
     .tb-center { display: flex; align-items: center; gap: 8px; padding: 6px; background: var(--ink); border: 1px solid var(--line); border-radius: var(--r-pill); }
     .tb-right  { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
 
+    @media (max-width: 1500px) {
+      .topbar { height: auto; grid-template-columns: auto 1fr; gap: 10px 16px; padding: 12px 24px; }
+      .tb-center { grid-column: 1 / -1; grid-row: 2; justify-self: center; }
+      .tb-right { flex-wrap: wrap; }
+    }
+
     .brand {
       display: inline-flex;
       align-items: center;
@@ -556,7 +562,7 @@
     .transcript-scroll::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
 
     .content {
-      line-height: 2.1;
+      line-height: 1.7;
       font-size: 18px;
       color: var(--paper-100);
       letter-spacing: 0.005em;
@@ -566,7 +572,7 @@
       display: grid;
       grid-template-columns: 56px 1fr;
       gap: 16px;
-      padding: 18px 0;
+      padding: 10px 0;
       border-bottom: 1px dashed var(--line);
       /* 段落隔离：屏幕外的段落跳过渲染；屏幕内段落的重绘也不会波及邻居 */
       contain: layout style paint;
@@ -596,13 +602,13 @@
 
     .word {
       display: inline-block;
-      padding: 4px 2px;
+      padding: 2px;
       margin: 0 1px;
       cursor: pointer;
       /* 去掉 transition —— 高亮要即时响应；transition + 频繁切换 = 持续重绘 */
       color: var(--paper-100);
       border-radius: 3px;
-      line-height: 1.4;
+      line-height: 1.3;
       border: 1px solid transparent;
     }
     .word:hover { background: var(--ink-3); }
@@ -769,6 +775,103 @@
       color: var(--paper-500);
     }
 
+    /* ─── 本地补丁 2026-07-20 · ① 双击改字 ─── */
+    .word.corrected {
+      color: var(--ember);
+      border-bottom: 2px solid rgba(255,122,77,.6);
+    }
+    .word.corr-hidden { display: none; }
+    .corr-editor {
+      position: fixed;
+      z-index: 9100;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px;
+      background: var(--ink-4);
+      border: 1px solid var(--line-2);
+      border-radius: var(--r-badge);
+      box-shadow: 0 8px 24px rgba(0,0,0,.45);
+    }
+    .corr-editor .corr-arrow { color: var(--paper-400); font-size: 12px; }
+    .corr-editor .corr-lbl { font-size: 10px; color: var(--paper-400); white-space: nowrap; user-select: none; }
+    .corr-editor .corr-from-input { width: 90px; border-color: var(--line-2); }
+    /* 本地补丁 2026-07-21 · 扩选按钮：贴着错词框左右，视觉上像输入框的一部分 */
+    .corr-editor .corr-exp {
+      padding: 4px 6px; font-size: 12px; line-height: 1;
+      background: var(--ink); color: var(--paper-400);
+      border: 1px solid var(--line-2); border-radius: 6px;
+      cursor: pointer; user-select: none;
+    }
+    .corr-editor .corr-exp:hover { color: var(--paper); border-color: var(--paper-400); }
+    .corr-editor input[type=text] {
+      width: 120px;
+      padding: 5px 8px;
+      background: var(--ink);
+      color: var(--paper-100);
+      border: 1px solid var(--signal);
+      border-radius: var(--r-input);
+      font-family: var(--sans);
+      font-size: 14px;
+      outline: none;
+    }
+    .corr-editor label {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 11px; color: var(--paper-300); cursor: pointer; white-space: nowrap;
+      text-transform: none; letter-spacing: 0;
+    }
+    .corr-editor button { padding: 5px 9px; font-size: 11px; }
+    .corr-editor .corr-scope { max-width: 142px; font-size: 11px; }
+    .corr-toast {
+      position: fixed;
+      right: 16px; bottom: 16px;
+      z-index: 9500;
+      padding: 10px 14px;
+      background: var(--ink-4);
+      border: 1px solid var(--line-2);
+      border-left: 3px solid var(--signal);
+      border-radius: var(--r-badge);
+      font-size: 12px;
+      color: var(--paper-100);
+      box-shadow: 0 8px 24px rgba(0,0,0,.45);
+      max-width: 380px;
+    }
+    .corr-toast.err { border-left-color: var(--danger); }
+
+    /* ─── 本地补丁 2026-07-20 · ② 字幕断行预览 ─── */
+    #capOverlay {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      text-align: center;
+      font-family: "PingFang SC", var(--sans);
+      font-weight: 500;
+      color: #FFFFFF;
+      white-space: nowrap;
+      paint-order: stroke fill;
+      z-index: 5;
+    }
+    .cap-body { padding: 10px 14px 12px; max-height: 300px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+    .cap-note {
+      font-size: 10.5px; line-height: 1.5; color: var(--paper-500);
+      padding-bottom: 8px; border-bottom: 1px dashed var(--line); margin-bottom: 8px;
+    }
+    .cap-alert {
+      font-size: 11.5px; line-height: 1.5; color: var(--danger);
+      margin-bottom: 8px;
+    }
+    .cap-line {
+      display: flex; gap: 8px; align-items: baseline;
+      padding: 3px 4px; border-radius: 4px; cursor: pointer;
+      font-size: 12.5px; color: var(--paper-200);
+    }
+    .cap-line:hover { background: var(--ink-3); }
+    .cap-line.current { background: var(--signal-wash); color: var(--signal-soft); }
+    .cap-line .t {
+      font-family: var(--mono); font-size: 10px; color: var(--paper-500);
+      flex-shrink: 0; font-variant-numeric: tabular-nums;
+    }
+
     ::selection { background: var(--signal); color: var(--paper-100); }
   </style>
 </head>
@@ -822,7 +925,7 @@
         <option value="1.5">1.5×</option>
         <option value="2">2×</option>
       </select>
-      <select id="silenceThreshold" onchange="applySilenceThreshold(parseFloat(this.value))" title="一键勾选逐字稿里 ≥ 此长度的停顿为「删除」（红色），你还能手动改。&#10;注意区别于切割参数的「内部静音切割」：那是导出时自动切掉保留段内残留的静音（黄色）。">
+      <select id="silenceThreshold" onchange="applySilenceThreshold(parseFloat(this.value))" title="一键把逐字稿里 ≥ 此长度的停顿勾成红色删除候选，你还能手动恢复。&#10;未标红的黄色静音不会被自动删除。">
         <option value="0.2" selected>静音 ≥ 0.2s</option>
         <option value="0.3">静音 ≥ 0.3s</option>
         <option value="0.5">静音 ≥ 0.5s</option>
@@ -831,7 +934,12 @@
       <span class="time-display"><span id="timeCur">00:00</span><span class="sep">/</span><span id="timeTot">00:00</span></span>
     </div>
     <div class="tb-right">
-      <button class="primary" onclick="exportFCPXML()">导出 FCPXML</button>
+      <button class="ghost-tight" id="capToggle" onclick="toggleCapPreview()" title="预览烧字幕的断行效果（与合成同一断行脚本、同参数）">字幕预览</button>
+      <button id="export-srt" onclick="exportSRT()" title="按当前删选和改字导出字幕，时间码对应剪后视频">导出 SRT</button>
+      <button class="primary" id="export-jianying" onclick="exportJianying()">导出剪映主轨</button>
+      <button onclick="exportFCPXML()">导出 FCPXML（通用）</button>
+      <button class="primary" id="export-mp4" onclick="exportMP4()">导出 MP4</button>
+      <span id="mp4-status" role="status" aria-live="polite"></span>
       <div class="tb-sep"></div>
       <button class="danger" onclick="clearAll()" title="清空选择">清空</button>
     </div>
@@ -857,6 +965,7 @@
                 <span><kbd>单击</kbd> 去那听</span>
                 <span><kbd>划过</kbd> 删 / 恢复</span>
                 <span><kbd>点静音</kbd> 删</span>
+                <span><kbd>双击</kbd> 改字</span>
               </div>
               <div class="help-row">
                 <span><kbd>Space</kbd> 播放</span>
@@ -873,39 +982,44 @@
 
       <div class="resizer" id="resizer"></div>
 
-      <!-- 右侧栏：视频 + 切割参数 -->
+      <!-- 右侧栏：视频 + 句尾保护 -->
       <div class="side-panel">
         <!-- Video card -->
         <div class="card video-card">
           <div id="video-container">
             <video id="player" src="/video" preload="metadata"></video>
+            <div id="capOverlay" style="display:none"></div>
           </div>
         </div>
 
-        <!-- Cut params card -->
+        <!-- A 模式默认：明确选区安全剪辑 -->
         <div class="card">
           <div class="card-head">
-            <span class="label">/ 静音剪辑</span>
+            <span class="label">/ 句尾保护</span>
+            <span class="meta">安全模式</span>
           </div>
           <div class="knobs-body">
             <div class="knob">
-              <div class="knob-head"><span>句头</span><b id="knob-padstart-val">2 帧</b></div>
-              <div class="knob-hint">每句开头多留几帧再起声，避免吞字、接得太赶</div>
-              <input type="range" id="knob-padstart" min="0" max="8" step="1" value="2">
+              <div class="knob-head"><span>所见即所得</span><b>只删红色</b></div>
+              <div class="knob-hint">未标红的字和自然停顿全部保留；静音检测只帮你找候选，不再偷偷改切点。</div>
             </div>
             <div class="knob">
-              <div class="knob-head"><span>句尾</span><b id="knob-padend-val">2 帧</b></div>
-              <div class="knob-hint">每句结尾多留几帧再收，避免话没说完就被切</div>
-              <input type="range" id="knob-padend" min="0" max="8" step="1" value="2">
+              <div class="knob-head"><span>真实帧保护</span><b>向外取整</b></div>
+              <div class="knob-hint">导出时按源视频真实帧率处理边界，宁可多留不足一帧，也不向内截掉尾字。</div>
             </div>
-            <div class="tightness">
-              <div class="tightness-line">
-                <span class="tt-end tt-tight">紧</span>
-                <div class="tt-wedge"></div>
-                <span class="tt-end tt-loose">松</span>
-              </div>
-              <div class="tightness-cap">往「紧」＝留白少、干脆利落　·　往「松」＝留白多、多留呼吸</div>
-            </div>
+          </div>
+        </div>
+
+        <!-- 字幕断行预览（本地补丁）：/api/captions-preview 服务端串真实断行脚本链 -->
+        <div class="card" id="capCard" style="display:none">
+          <div class="card-head">
+            <span class="label">/ 字幕预览</span>
+            <span class="meta" id="capMeta"></span>
+          </div>
+          <div class="cap-body">
+            <div class="cap-note">预览包含已保存的改字；“仅此处”的修改只应用于对应位置。后续分镜可能调整字幕断行。</div>
+            <div class="cap-alert" id="capAlert" style="display:none"></div>
+            <div id="capLines"></div>
           </div>
         </div>
 
@@ -921,7 +1035,7 @@
         <div class="wave-legend">
           <span class="wl"><span class="sw" id="lg-silence"></span>静音</span>
           <span class="wl"><span class="sw" id="lg-del"></span>选中删除</span>
-          <span class="wl"><span class="sw" id="lg-cut"></span>额外切掉</span>
+          <span class="wl"><span class="sw" id="lg-cut"></span>额外切掉（应为 0）</span>
         </div>
         <span class="sstat">总时长 <b id="tl-total">--:--</b></span>
         <span class="sstat sstat-final">剪后 <b id="tl-final">--:--</b></span>
@@ -968,9 +1082,7 @@
     // 波形 / 切割预览数据
     let peaksData = null;          // { duration, sampleRate, peaks:[0..1] }
     let silencePeriods = [];       // ffmpeg 检测的静音段
-    let cutOpts = {                // 切割参数（与 lib/compute_keeps.js 默认一致，可被滑块覆盖）
-      lookBack: 0.6, padStart: 2 / 30, padEnd: 2 / 30, minInternalSilence: 0.2
-    };
+    let cutOpts = { preserveNaturalPauses: true }; // A 模式默认：只删明确红色选区
 
     loadingOverlay.classList.add('show');
     const loadingMessages = ['正在加载字幕数据...', '正在解析音频波形...', '正在准备播放器...', '即将就绪...'];
@@ -992,10 +1104,12 @@
       .then(async (data) => {
         words = data.words || [];
         autoSelected = new Set(data.autoSelected || []);
-        autoSelected.forEach(idx => {
+        autoSelected.forEach(idx => aiSelectedIds.add('word-' + idx));
+        const initialSelected = Array.isArray(data.initialSelected) ? data.initialSelected : [...autoSelected];
+        initialSelected.forEach(idx => {
+          if (!Number.isInteger(idx) || idx < 0 || idx >= words.length) return;
           const id = 'word-' + idx;
           selected.add(id);
-          aiSelectedIds.add(id);
         });
         markSegsDirty();
 
@@ -1003,17 +1117,21 @@
         const [pk, sp] = await Promise.all([fetchJSON('./peaks.json'), fetchJSON('./silence_periods.json')]);
         peaksData = (pk && Array.isArray(pk.peaks)) ? pk : null;
         silencePeriods = Array.isArray(sp) ? sp.slice().sort((a, b) => a.start - b.start) : [];
+        // 改字覆盖层的数据源 = 真实纠错词典（本地补丁），不是页面自己的记录——
+        // 这样页面显示与烧字幕结果永远一致，词典被手工改过也能如实反映
+        await loadCorrections();
 
         initWave();
 
         // 顶栏文件元信息
         document.getElementById('fileSub').innerHTML =
-          `REVIEW <span class="dot">●</span> ${aiSelectedIds.size} 处 AI 预选`;
+          `REVIEW <span class="dot">●</span> ${aiSelectedIds.size} 处 AI 预选<span id="dictBadge"></span>`;
+        updateDictBadge();
 
         loadingOverlay.classList.remove('show');
         clearInterval(msgTimer);
         render();
-        initKnobs();
+        initCutSafety();
         initThemeSwitcher();
       })
       .catch(err => {
@@ -1364,35 +1482,21 @@
       applyWaveTheme(current, false); // 同步图例色块到当前主题
     }
 
-    // 切割参数滑块：实时重算波形上的「额外切掉」预览，并在导出时一并发给 server
-    function initKnobs() {
-      // 吸附窗口(lookBack)与内部静音切割(minInternalSilence)已固定为默认值（见 cutOpts），
-      // 不再暴露为滑块——它们是「工具自动做对的事」，面板用静态说明讲清机制即可。
-      const padS = document.getElementById('knob-padstart');
-      const padE = document.getElementById('knob-padend');
-      const padSV = document.getElementById('knob-padstart-val');
-      const padEV = document.getElementById('knob-padend-val');
-      const sync = () => {
-        const fs = parseInt(padS.value, 10), fe = parseInt(padE.value, 10);
-        cutOpts.padStart = fs / 30;
-        cutOpts.padEnd = fe / 30;
-        padSV.textContent = fs + ' 帧';
-        padEV.textContent = fe + ' 帧';
-        playbackCutsDirty = true;   // 切割参数变了，播放跳段也要跟着重算
-        wave.redraw();
-      };
-      [padS, padE].forEach(el => el.addEventListener('input', sync));
-      sync();
+    // 安全模式没有隐藏滑块：页面、播放预览、字幕预览和导出共用同一显式选择规则。
+    function initCutSafety() {
+      playbackCutsDirty = true;
+      wave.redraw();
+      scheduleCapPreview();
     }
 
     // === 选段缓存：只在 selected 变化时重算 ===
     let cachedDeleteSegs = [];
     let segsDirty = true;
-    // 播放跳段用的「实际切点」缓存：与波形 / 导出 FCPXML 同源（computeFinalKeeps），
-    // 这样预览听到的就是真正会被剪掉的内容，且切点已吸附到静音。选段或切割参数变化时失效。
+    // 播放跳段用的「实际切点」缓存：与波形 / 导出 FCPXML 同源（computeFinalKeeps）。
+    // 安全模式下实际切点必须等于明确选区；选段变化时缓存失效。
     let cachedPlaybackCuts = [];
     let playbackCutsDirty = true;
-    function markSegsDirty() { segsDirty = true; playbackCutsDirty = true; if (typeof wave !== 'undefined') wave.markDirty(); }
+    function markSegsDirty() { segsDirty = true; playbackCutsDirty = true; if (typeof wave !== 'undefined') wave.markDirty(); scheduleCapPreview(); }
     function getPlaybackCuts() {
       if (!playbackCutsDirty) return cachedPlaybackCuts;
       const del = getDeleteSegments();
@@ -1408,25 +1512,12 @@
     }
     function getDeleteSegments() {
       if (!segsDirty) return cachedDeleteSegs;
-      // 按词序扫一遍，把「连续删除」连成整刀：两个选中词之间只要没夹着「你保留的真词」
-      // （中间只有静音段 isGap 或字间时间戳零头），就贯穿成一刀，吞掉中间的缝——
-      // 避免连续删除里残留没字可点的声音/空隙（旧版用固定 0.15s 阈值会漏掉 >0.15s 的缝）。
-      // 一旦夹着你保留的真词，才断开成两段，绝不误删要留的内容。
-      const out = [];
-      let cur = null;          // 当前正在累积的删除段
-      let sawKeptWord = false;  // 自上一个选中词以来，中间是否夹了「保留的真词」
-      for (let i = 0; i < words.length; i++) {
-        const w = words[i];
-        if (selected.has('word-' + i)) {
-          if (cur && !sawKeptWord) cur.end = w.end;            // 只隔静音/零头 → 连成一刀
-          else { if (cur) out.push(cur); cur = { start: w.start, end: w.end }; }
-          sawKeptWord = false;
-        } else if (!w.isGap) {
-          sawKeptWord = true;   // 保留的真词 → 会切断删除段，不能被吞
-        }
-        // 未选中的 isGap（静音/缝）：不切断 run，留给下一个选中词决定是否吞
-      }
-      if (cur) out.push(cur);
+      const selectedIdx = [...selected]
+        .map(id => parseInt(id.replace('word-', ''), 10))
+        .filter(Number.isInteger);
+      const out = (typeof ComputeKeeps !== 'undefined')
+        ? ComputeKeeps.buildDeleteListFromSelection(words, selectedIdx)
+        : selectedIdx.sort((a, b) => a - b).map(i => ({ start: words[i].start, end: words[i].end }));
       cachedDeleteSegs = out;
       segsDirty = false;
       return out;
@@ -1547,6 +1638,8 @@
             div.textContent = word.text;
             if (selected.has(id)) div.classList.add('selected');
             if (aiSelectedIds.has(id)) div.classList.add('ai-selected');
+            // 改字覆盖层（本地补丁）：词典纠错只改显示与词典文件，words[]/data.json 保持 ASR 原文
+            if (corrSpans.length) applyCorrToEl(div, idx);
             // 交互统一由 content 上的委托处理（见 mousedown/move/up），此处不再绑事件
             body.appendChild(div);
             elements.push({ el: div, word, idx });
@@ -1599,7 +1692,15 @@
     function applyRange(startId, endId, mode) {
       const a = elIndexOfId(startId), b = elIndexOfId(endId);
       if (a < 0 || b < 0) return;
-      const [lo, hi] = a <= b ? [a, b] : [b, a];
+      let [lo, hi] = a <= b ? [a, b] : [b, a];
+      // 改字跨度是原子单元（本地补丁）：端点落在纠错词上时把区间扩到整个 span，
+      // 否则隐藏的成员 token 漏进/漏出 selected，UI 划红整词但导出只剪首字音频
+      if (typeof corrCovering === 'function') {
+        const cLo = corrCovering(elements[lo].idx);
+        if (cLo) while (lo - 1 >= 0 && elements[lo - 1].idx >= cLo.startIdx) lo--;
+        const cHi = corrCovering(elements[hi].idx);
+        if (cHi) while (hi + 1 < elements.length && elements[hi + 1].idx <= cHi.endIdx) hi++;
+      }
       let tMin = Infinity, tMax = -Infinity;
       for (let j = lo; j <= hi; j++) {
         const id = 'word-' + elements[j].idx;
@@ -1668,8 +1769,9 @@
         markSegsDirty();
         refreshSelectionStyles();
       } else {
-        // 词：定位并播放（去那听）
+        // 词：定位并播放（去那听）；双击 = 改字（本地补丁；第一次单击的 seek 同词幂等，无害）
         const wi = parseInt(pd.startId.replace('word-', ''), 10);
+        if (e.detail >= 2) { openCorrEditor(wi); return; }
         const w = words[wi];
         if (w) {
           clearPreview();
@@ -1791,7 +1893,13 @@
       if (idx !== currentWordIdx) {
         currentWordIdx = idx;
         const entry = idx >= 0 ? elements.find(e => e.idx === idx) : null;
-        const el = entry ? entry.el : null;
+        let el = entry ? entry.el : null;
+        // 改字词的成员 token 是 display:none（本地补丁）：高亮改落到可见的头元素上
+        if (el && el.classList.contains('corr-hidden') && typeof corrCovering === 'function') {
+          const c = corrCovering(idx);
+          const headEnt = c ? elements.find(e => e.idx === c.startIdx && !e.el.dataset.gapGroup) : null;
+          if (headEnt) el = headEnt.el;
+        }
         if (el !== currentEl) {
           if (currentEl) currentEl.classList.remove('current');
           if (el) {
@@ -1802,6 +1910,7 @@
         }
       }
 
+      updateCapOverlay(t);
       wave.draw(t);
     }
 
@@ -1853,6 +1962,106 @@
       render();
     }
 
+    // ===== SRT 导出：复用字幕预览的剪后时间码和纠错结果 =====
+    function buildSRT(lines) {
+      if (!Array.isArray(lines) || !lines.length) throw new Error('没有可导出的字幕，请检查删选');
+      const stamp = ms => {
+        const pad = (n, width = 2) => String(n).padStart(width, '0');
+        return `${pad(Math.floor(ms / 3600000))}:${pad(Math.floor(ms / 60000) % 60)}:${pad(Math.floor(ms / 1000) % 60)},${pad(ms % 1000, 3)}`;
+      };
+      let previousStart = -1;
+      return lines.map((line, i) => {
+        if (!line || !Number.isSafeInteger(line.startMs) || !Number.isSafeInteger(line.endMs) ||
+            line.startMs < 0 || line.endMs <= line.startMs || line.startMs < previousStart ||
+            typeof line.text !== 'string' || !line.text.trim()) {
+          throw new Error(`第 ${i + 1} 条字幕的文字或时间码无效，请重新预览`);
+        }
+        previousStart = line.startMs;
+        const text = line.text.trim().replace(/\r\n?/g, '\n').replace(/\n+/g, '\r\n');
+        return `${i + 1}\r\n${stamp(line.startMs)} --> ${stamp(line.endMs)}\r\n${text}\r\n`;
+      }).join('\r\n') + '\r\n';
+    }
+
+    async function exportSRT() {
+      const button = document.getElementById('export-srt');
+      if (button.disabled) return;
+      const label = button.textContent;
+      button.disabled = true;
+      button.textContent = '生成字幕…';
+      try {
+        // 每次读取点击时的选区，不使用可能过期的字幕预览缓存。
+        const finalSelected = [...selected].map(id => Number(id.replace('word-', ''))).sort((a, b) => a - b);
+        const response = await fetch('/api/captions-preview', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deleteList: getDeleteSegments(), opts: cutOpts, finalSelected })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || `HTTP ${response.status}`);
+        if (data.failures && data.failures.length) throw new Error(data.failures.join('；'));
+        const content = buildSRT(data.lines);
+        const blob = new Blob(['\uFEFF', content], { type: 'application/x-subrip;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+        link.href = url;
+        link.download = `剪后字幕_${stamp}.srt`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        corrToast(`已导出 ${data.lines.length} 条 SRT 字幕，时间码对应本次选区的剪后视频`);
+      } catch (err) {
+        corrToast('SRT 导出失败：' + err.message, true);
+      } finally {
+        button.disabled = false;
+        button.textContent = label;
+      }
+    }
+    // ===== SRT 导出结束 =====
+
+    async function exportMP4() {
+      const button = document.getElementById('export-mp4');
+      const status = document.getElementById('mp4-status');
+      button.disabled = true;
+      status.textContent = '正在生成初剪视频，请保持页面打开…';
+      try {
+        const finalSelected = [...selected].map(id => Number(id.replace('word-', ''))).sort((a, b) => a - b);
+        const response = await fetch('/api/mp4', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deleteList: getDeleteSegments(), opts: cutOpts, finalSelected })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || '导出失败');
+        status.textContent = '已生成（原声，无字幕） ';
+        const link = document.createElement('a');
+        link.href = '/api/download/' + encodeURIComponent(data.output);
+        link.textContent = '下载 MP4';
+        link.download = data.output.split('/').pop();
+        status.appendChild(link);
+        link.click();
+      } catch (err) {
+        status.textContent = '导出失败：' + err.message + '。可重试。';
+      } finally { button.disabled = false; }
+    }
+
+    async function exportJianying() {
+      const button = document.getElementById('export-jianying');
+      button.disabled = true;
+      try {
+        const finalSelected = [...selected].map(id => Number(id.replace('word-', ''))).sort((a, b) => a - b);
+        const res = await fetch('/api/jianying', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deleteList: getDeleteSegments(), opts: cutOpts, finalSelected })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || '导出失败');
+        alert(`已生成剪映主轨草稿：${data.jianying.draftName}\n保留 ${data.segments} 个片段。\n\n在剪映首页打开该草稿；若列表未刷新，正常退出并重新打开剪映。无需再导入 FCPXML。\n\n每次导出都是新草稿，不会覆盖已有编辑。`);
+      } catch (err) { alert('剪映主轨导出失败：' + err.message); }
+      finally { button.disabled = false; }
+    }
+
     async function exportFCPXML() {
       const segments = getDeleteSegments();
       if (!segments.length) { alert('没有选中任何片段'); return; }
@@ -1879,7 +2088,7 @@
           a.download = fileName;
           a.click();
           URL.revokeObjectURL(url);
-          alert(`✅ FCPXML 已导出\n\n📁 文件: ${fileName}\n🎬 保留片段: ${data.segments} 个\n\n直接拖入 Final Cut Pro 即可`);
+          alert(`✅ FCPXML 已导出\n\n📁 文件: ${fileName}\n🎬 保留片段: ${data.segments} 个\n🛡️ ${data.mode} · ${Number(data.fps).toFixed(3)}fps · 尾字风险 ${data.tailRiskCount}\n\n直接拖入 Final Cut Pro 即可`);
         } else {
           alert('❌ 导出失败: ' + data.error);
         }
@@ -1964,6 +2173,503 @@
       // 视口变化时重新夹紧（换显示器 / 缩放窗口都会触发）
       window.addEventListener('resize', () => setWaveH(curWaveH(), false));
     })();
+
+    // ============================================================
+    // 本地补丁 2026-07-20（经用户拍板破例修改第三方 skill，
+    // 补丁说明：remotion-video/docs/ai-jian-koubo-local-patch.md）
+    // ① 双击改字：默认按位置保存，仅主动选择时写入批量词典；
+    //    words[]/data.json 保持 ASR 原文（review_log 学习基线不受污染）
+    // ② 字幕断行预览：/api/captions-preview 服务端串真实脚本链
+    //   （临时 fcpxml → build_cut_timeline.js → 字幕断行.js → 逐行套词典），
+    //    浏览器只渲染 —— 与合成同引擎同脚本同参数
+    // ============================================================
+
+    // ===== ① 双击改字 =====
+    // 词典匹配全稿；默认单处修改绑定原始 token 位置，优先于词典。
+    let corrections = [];   // [{from,to,scope,startIdx?,endIdx?}]
+    let corrSpans = [];     // [{startIdx,endIdx,from,to,scope}]
+    let corrDead = [];      // 片内词典里匹配不到本片原文的条目（烧字幕不会生效，多半是错词填错）
+
+    // 顶栏常驻徽标：纠错生效处数 + 失效条目数（失效信息一闪而过容易漏，必须常驻）
+    function updateDictBadge() {
+      const el = document.getElementById('dictBadge');
+      if (!el) return;
+      let s = '';
+      if (corrSpans.length) s += ' <span class="dot">●</span> 纠错 ' + corrSpans.length + ' 处';
+      if (corrDead.length) s += ' <span style="color:var(--danger)">● 词典 ' + corrDead.length + ' 条失效</span>';
+      el.innerHTML = s;
+      el.title = corrDead.length
+        ? '这些词典条目在本片文本里匹配不到，烧字幕时不会生效（多半是错词填错了）：\n' +
+          corrDead.map(c => c.from + ' → ' + c.to).join('\n')
+        : '';
+    }
+    function corrHeadAt(idx)   { return corrSpans.find(c => c.startIdx === idx) || null; }
+    function corrCovering(idx) { return corrSpans.find(c => idx >= c.startIdx && idx <= c.endIdx) || null; }
+
+    function rebuildCorrSpans() {
+      corrSpans = [];
+      if (!corrections.length || !words.length) return;
+      const occurrences = corrections.filter(c => c.scope === 'occurrence');
+      corrSpans = occurrences.map(c => ({ ...c }));
+      const sorted = corrections.filter(c => c.scope !== 'occurrence')
+        .sort((a, b) => b.from.length - a.from.length); // 长词先占，防子串抢匹配
+      let i = 0;
+      while (i < words.length) {
+        if (words[i].isGap) { i++; continue; }
+        let hi = i;
+        while (hi + 1 < words.length && !words[hi + 1].isGap) hi++;
+        let str = '';
+        const tokOfUnit = [], startUnit = {}, endUnit = {};
+        for (let k = i; k <= hi; k++) {
+          startUnit[k] = str.length;
+          for (let u = 0; u < words[k].text.length; u++) tokOfUnit.push(k);
+          str += words[k].text;
+          endUnit[k] = str.length - 1;
+        }
+        const taken = new Array(str.length).fill(false);
+        for (const c of occurrences) {
+          if (c.startIdx < i || c.endIdx > hi) continue;
+          for (let z = startUnit[c.startIdx]; z <= endUnit[c.endIdx]; z++) taken[z] = true;
+        }
+        for (const c of sorted) {
+          if (!c.from) continue;
+          let p = str.indexOf(c.from);
+          while (p !== -1) {
+            const q = p + c.from.length - 1;
+            let free = true;
+            for (let z = p; z <= q; z++) if (taken[z]) { free = false; break; }
+            // 必须落在 token 边界上，否则覆盖层会吞掉半个 token
+            if (free && startUnit[tokOfUnit[p]] === p && endUnit[tokOfUnit[q]] === q) {
+              for (let z = p; z <= q; z++) taken[z] = true;
+              corrSpans.push({ startIdx: tokOfUnit[p], endIdx: tokOfUnit[q], from: c.from, to: c.to, scope: c.scope });
+            }
+            p = str.indexOf(c.from, p + 1);
+          }
+        }
+        i = hi + 1;
+      }
+      corrSpans.sort((a, b) => a.startIdx - b.startIdx);
+    }
+
+    function applyCorrToEl(el, idx) {
+      const ch = corrHeadAt(idx);
+      if (ch) {
+        el.textContent = ch.to;
+        el.classList.add('corrected');
+        el.classList.remove('corr-hidden');
+        el.title = '原文「' + ch.from + '」 · ' + (ch.scope === 'occurrence' ? '仅此处' : '词典批量替换') + ' · 双击可再改/还原';
+      } else if (corrCovering(idx)) {
+        el.classList.add('corr-hidden');
+        el.classList.remove('corrected');
+      } else {
+        el.textContent = words[idx].text;
+        el.classList.remove('corrected', 'corr-hidden');
+        el.removeAttribute('title');
+      }
+    }
+    // 全稿重绘覆盖层（只改 class/文本，不重建 DOM，滚动位置不动）
+    function repaintCorrections() {
+      for (const ent of elements) {
+        if (ent.el.dataset.gapGroup) continue;
+        applyCorrToEl(ent.el, ent.idx);
+      }
+    }
+
+    // 连续非 gap token 串（跨度定位的工作区）：str + UTF-16 code unit → token idx 映射
+    function runInfoAt(wi) {
+      let lo = wi, hi = wi;
+      while (lo - 1 >= 0 && !words[lo - 1].isGap) lo--;
+      while (hi + 1 < words.length && !words[hi + 1].isGap) hi++;
+      let str = '';
+      const tokOfUnit = [];
+      let wiUnit = -1;
+      for (let i = lo; i <= hi; i++) {
+        if (i === wi) wiUnit = str.length;
+        for (let u = 0; u < words[i].text.length; u++) tokOfUnit.push(i);
+        str += words[i].text;
+      }
+      return { str, tokOfUnit, wiUnit };
+    }
+    // 用户把错词输入框改长/改短后，按文本在 token 串里重定位跨度（取覆盖/最靠近双击处的出现）
+    function spanForFrom(wi, fromText) {
+      const { str, tokOfUnit, wiUnit } = runInfoAt(wi);
+      const hits = [];
+      let p = str.indexOf(fromText);
+      while (p !== -1) { hits.push(p); p = str.indexOf(fromText, p + 1); }
+      if (!hits.length) return null;
+      let best = hits[0], bestD = Infinity;
+      for (const h of hits) {
+        const a = h, b = h + fromText.length - 1;
+        const d = (wiUnit >= a && wiUnit <= b) ? -1 : Math.min(Math.abs(wiUnit - a), Math.abs(wiUnit - b));
+        if (d < bestD) { bestD = d; best = h; }
+      }
+      return { startIdx: tokOfUnit[best], endIdx: tokOfUnit[best + fromText.length - 1], from: fromText };
+    }
+    // 错词在全稿的出现次数（词典是整词替换：多处出现会全部替换，提交前据此提醒）
+    function countInTranscript(fromText) {
+      let n = 0, run = '';
+      const flush = () => {
+        let p = run.indexOf(fromText);
+        while (p !== -1) { n++; p = run.indexOf(fromText, p + 1); }
+        run = '';
+      };
+      for (const w of words) { if (w.isGap) { if (run) flush(); } else run += w.text; }
+      if (run) flush();
+      return n;
+    }
+
+    // 拉真实词典（片内优先覆盖全局同名键），派生出全稿覆盖层
+    async function loadCorrections() {
+      try {
+        const res = await fetch('/api/corrections', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'list' })
+        });
+        const d = await res.json();
+        if (!res.ok || !d || !d.success) throw new Error((d && d.error) || '纠错读取失败');
+        const out = [];
+        const put = (f, t, scope) => {
+          if (typeof f !== 'string' || !f || typeof t !== 'string') return;
+          const i = out.findIndex(c => c.from === f);
+          if (i >= 0) out[i] = { from: f, to: t, scope }; else out.push({ from: f, to: t, scope });
+        };
+        Object.entries(d.global || {}).forEach(([f, t]) => put(f, t, 'global'));
+        Object.entries(d.local || {}).forEach(([f, t]) => put(f, t, 'local'));   // 片内优先
+        (d.occurrences || []).forEach(c => out.push({ ...c, scope: 'occurrence' }));
+        corrections = out;
+        rebuildCorrSpans();
+        // 片内词典里在本片一个字都匹配不到的条目 = 多半是错词填错了（烧字幕时不会起作用）
+        corrDead = corrections.filter(c => c.scope === 'local' && !corrSpans.some(s => s.from === c.from));
+        updateDictBadge();
+        return true;
+      } catch (e) { corrToast('纠错读取失败：' + e.message, true); return false; }
+    }
+
+    let corrEditorEl = null, corrEditorCleanup = null;
+    function closeCorrEditor() {
+      if (corrEditorCleanup) { corrEditorCleanup(); corrEditorCleanup = null; }
+      if (corrEditorEl) { corrEditorEl.remove(); corrEditorEl = null; }
+    }
+    function openCorrEditor(wi) {
+      closeCorrEditor(); hideToolbar(); clearPreview(); video.pause();
+      if (!words[wi] || words[wi].isGap) return;
+      const existing = corrCovering(wi);
+      const initSpan = existing
+        ? { startIdx: existing.startIdx, endIdx: existing.endIdx, from: existing.from }
+        : { startIdx: wi, endIdx: wi, from: words[wi].text };
+      const anchorEnt = elements.find(ent => ent.idx === initSpan.startIdx && !ent.el.dataset.gapGroup);
+      const rect = anchorEnt ? anchorEnt.el.getBoundingClientRect()
+                             : { left: innerWidth / 2, top: innerHeight / 2, bottom: innerHeight / 2 };
+
+      const box = document.createElement('div');
+      box.className = 'corr-editor';
+      // 本地补丁 2026-07-21 · ① 扩选按钮：中文字级 token 下 Intl.Segmenter 切不出「陈豹」这类
+      // 非词典词，双击只能选中单字。⟨ ⟩ 按边界向左/右各扩一个 token，免去手敲补长错词。
+      // 批量替换必须主动选择；即使原词来自词典，重新编辑也默认只改此处。
+      box.innerHTML =
+        '<span class="corr-lbl">错词</span>' +
+        '<button class="corr-exp" data-dir="l" title="向左多选一个字">⟨</button>' +
+        '<input type="text" class="corr-from-input" title="逐字稿里的原文。用 ⟨ ⟩ 扩大选取范围，或直接输入（如「家」补成「收藏家」）">' +
+        '<button class="corr-exp" data-dir="r" title="向右多选一个字">⟩</button>' +
+        '<span class="corr-arrow">→</span>' +
+        '<span class="corr-lbl">改成</span>' +
+        '<input type="text" class="corr-to-input" title="要改成的正确词">' +
+        '<select class="corr-scope" aria-label="修改范围"><option value="occurrence">仅此处</option><option value="local">本片所有相同词</option><option value="global">所有片子</option></select>' +
+        (existing ? '<button class="corr-revert" title="按所选范围还原修改">还原</button>' : '') +
+        '<button class="corr-ok" title="Enter 提交 · Esc 取消">✓</button>';
+      document.body.appendChild(box);
+      corrEditorEl = box;
+      const left = Math.min(Math.max(8, rect.left), innerWidth - box.offsetWidth - 8);
+      const top = (rect.bottom + 8 + box.offsetHeight > innerHeight) ? rect.top - box.offsetHeight - 8 : rect.bottom + 8;
+      box.style.left = left + 'px';
+      box.style.top = top + 'px';
+
+      const fromInput = box.querySelector('.corr-from-input');
+      const toInput = box.querySelector('.corr-to-input');
+      const scopeSelect = box.querySelector('.corr-scope');
+      fromInput.value = initSpan.from;
+      toInput.value = existing ? existing.to : initSpan.from;
+      toInput.focus(); toInput.select();
+
+      // 本地补丁 2026-07-21 · ⟨ ⟩ 扩选：以当前错词文本重新定位跨度后向外扩一个 token，
+      // 不跨静音段（runInfoAt 的边界）。手敲补长与按钮扩选可混用——两者都只改 fromInput 的值，
+      // 提交时统一由 commit 里的 spanForFrom 重定位，不额外引入一份跨度状态。
+      box.querySelectorAll('.corr-exp').forEach(btn => {
+        btn.addEventListener('click', ev => {
+          ev.preventDefault(); ev.stopPropagation();
+          const cur = fromInput.value.trim();
+          const sp = cur ? spanForFrom(wi, cur) : null;
+          if (!sp) { corrToast('❌ 这句里找不到「' + cur + '」，无法扩选', true); return; }
+          let { startIdx, endIdx } = sp;
+          if (btn.dataset.dir === 'l') {
+            if (startIdx - 1 < 0 || words[startIdx - 1].isGap) { corrToast('已到本句左边界', true); return; }
+            startIdx--;
+          } else {
+            if (endIdx + 1 >= words.length || words[endIdx + 1].isGap) { corrToast('已到本句右边界', true); return; }
+            endIdx++;
+          }
+          let t = '';
+          for (let i = startIdx; i <= endIdx; i++) t += words[i].text;
+          fromInput.value = t;
+          if (!toInput.value.trim() || toInput.value === sp.from) toInput.value = t;
+        });
+      });
+
+      box.addEventListener('mousedown', ev => ev.stopPropagation());
+      const commit = () => {
+        pendingDown = null;   // 防御：confirm 弹窗会吞掉配对 mouseup，残留的 pendingDown 会触发幻影划选
+        const fromVal = fromInput.value.trim();
+        const to = toInput.value.trim();
+        const scope = scopeSelect.value;
+        if (!fromVal) { corrToast('❌ 错词不能为空', true); return; }   // 校验失败编辑器留着
+        // 错词被改过 → 按文本重定位 token 跨度（须仍能在双击处附近找到）
+        let span = initSpan;
+        if (fromVal !== initSpan.from) {
+          span = spanForFrom(wi, fromVal);
+          if (!span) { corrToast('❌ 这句里找不到「' + fromVal + '」，请核对错词', true); return; }
+        }
+        if (!to || to === span.from) {   // 清空正词或与错词相同 → 视为还原
+          closeCorrEditor();
+          if (existing) removeCorrection(existing, scope);
+          return;
+        }
+        // 仅批量范围需要提醒同词多处出现，单处修改不弹全文替换提示。
+        const n = countInTranscript(span.from);
+        // 本地补丁 2026-07-21 · 取消即关闭：confirm 点取消必须 closeCorrEditor 再 return。
+        // 否则编辑器留在页面上，下一次点击又被 onOutside 的「点外部=提交」重新触发 commit，
+        // 同一个 confirm 无限复弹，用户只能靠 Esc 脱身。
+        if (scope !== 'occurrence' && n > 1 && !confirm('本片原文有 ' + n + ' 处「' + span.from + '」。将批量替换为「' + to + '」，已有单处修改仍优先。\n确定批量替换吗？')) {
+          closeCorrEditor(); return;
+        }
+        if (scope === 'global' &&
+            !confirm('「' + span.from + ' → ' + to + '」将写入全局专名词典，对所有片子生效。确定？')) {
+          closeCorrEditor(); return;
+        }
+        closeCorrEditor();
+        setCorrection(span, to, scope, existing);
+      };
+      const onKey = ev => {
+        ev.stopPropagation();
+        if (ev.key === 'Enter' || ev.keyCode === 13) commit();
+        else if (ev.key === 'Escape' || ev.keyCode === 27) closeCorrEditor();
+      };
+      box.querySelector('.corr-ok').addEventListener('click', commit);
+      const revertBtn = box.querySelector('.corr-revert');
+      if (revertBtn) revertBtn.addEventListener('click', () => { closeCorrEditor(); removeCorrection(existing, scopeSelect.value); });
+      box.addEventListener('keydown', onKey);   // 挂容器：焦点在按钮/勾选框上时 Esc 也能退出
+      // 点编辑框以外任意处 = 提交（blur 语义）；校验不过会留在原地。
+      // 拦下这次按下（stopPropagation）：这一击只用来关编辑器，不再顺带触发词的点/划——
+      // 否则 commit 里的 confirm 弹窗吞掉 mouseup 后，残留 pendingDown 会造成幻影划选。
+      const onOutside = ev => {
+        if (corrEditorEl && !corrEditorEl.contains(ev.target)) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          commit();
+        }
+      };
+      document.addEventListener('mousedown', onOutside, true);
+      corrEditorCleanup = () => document.removeEventListener('mousedown', onOutside, true);
+    }
+
+    async function setCorrection(span, to, scope, existing) {
+      const r = await postCorrection({ action: 'set', from: span.from, to, scope, span });
+      if (!r) return;
+      // 单处覆盖不能删除背后的词典，只清理用户明确改换的条目。
+      if (existing && ((existing.scope === 'occurrence' && scope !== 'occurrence') ||
+          (existing.scope === scope && scope !== 'occurrence' && existing.from !== span.from) ||
+          (existing.scope === 'occurrence' && scope === 'occurrence' &&
+           (existing.endIdx < span.startIdx || existing.startIdx > span.endIdx)))) {
+        const removed = await postCorrection({ action: 'remove', from: existing.from, scope: existing.scope,
+          span: { startIdx: existing.startIdx, endIdx: existing.endIdx } });
+        if (!removed) { await loadCorrections(); repaintCorrections(); return; }
+      }
+      if (!await loadCorrections()) return;
+      repaintCorrections();
+      scheduleCapPreview();
+      corrToast('已保存' + (scope === 'occurrence' ? '，仅修改此处' : scope === 'local' ? '，修改本片相同词' : '，更新所有片子的词典') + '：「' + span.from + ' → ' + to + '」');
+    }
+    async function removeCorrection(corr, scope = 'occurrence') {
+      if (scope !== 'occurrence' && !confirm(scope === 'global' ? '确定移除所有片子中的这条词典纠错？' : '确定移除本片所有相同词的词典纠错？')) return;
+      if (scope === 'occurrence' && corr.scope !== 'occurrence') {
+        await setCorrection(corr, corr.from, scope, corr);
+        return;
+      }
+      const r = await postCorrection({ action: 'remove', from: corr.from, scope,
+        span: { startIdx: corr.startIdx, endIdx: corr.endIdx } });
+      if (!r || !await loadCorrections()) return;
+      repaintCorrections();
+      scheduleCapPreview();
+      corrToast(scope === 'occurrence' ? '已撤销此处修改' : '已移除所选范围的词典纠错');
+    }
+    async function postCorrection(payload) {
+      try {
+        const res = await fetch('/api/corrections', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || ('HTTP ' + res.status));
+        scheduleCapPreview();   // 词典变了 → 预览行文本要刷新
+        return data;
+      } catch (err) {
+        corrToast('❌ 纠错未保存：' + err.message, true);
+        return null;
+      }
+    }
+    let corrToastTimer = 0;
+    function corrToast(msg, isErr) {
+      let el = document.querySelector('.corr-toast');
+      if (!el) { el = document.createElement('div'); el.className = 'corr-toast'; document.body.appendChild(el); }
+      el.textContent = msg;
+      el.classList.toggle('err', !!isErr);
+      clearTimeout(corrToastTimer);
+      corrToastTimer = setTimeout(() => el.remove(), isErr ? 6000 : 3500);
+    }
+
+    // ===== ② 字幕断行预览 =====
+    const capState = { on: false, lines: [], fetching: false, timer: 0 };
+    const capOverlay = document.getElementById('capOverlay');
+
+    function toggleCapPreview() {
+      capState.on = !capState.on;
+      const btn = document.getElementById('capToggle');
+      if (btn) btn.style.color = capState.on ? 'var(--ember)' : '';
+      document.getElementById('capCard').style.display = capState.on ? '' : 'none';
+      capOverlay.style.display = capState.on ? '' : 'none';
+      if (capState.on) { layoutCapOverlay(); fetchCapPreview(); }
+    }
+    function scheduleCapPreview() {
+      if (!capState.on) return;
+      clearTimeout(capState.timer);
+      capState.timer = setTimeout(fetchCapPreview, 1500);
+    }
+    async function fetchCapPreview() {
+      if (!capState.on) return;
+      if (capState.fetching) { scheduleCapPreview(); return; }
+      capState.fetching = true;
+      const meta = document.getElementById('capMeta');
+      if (meta) meta.textContent = '计算中…';
+      try {
+        const res = await fetch('/api/captions-preview', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deleteList: getDeleteSegments(), opts: cutOpts,
+            finalSelected: [...selected].map(id => Number(id.replace('word-', ''))).sort((a, b) => a - b) })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || ('HTTP ' + res.status));
+        capState.lines = data.lines || [];
+        renderCapPanel(data);
+      } catch (err) {
+        capState.lines = [];
+        renderCapPanel({ error: err.message });
+      } finally {
+        capState.fetching = false;
+      }
+    }
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+    }
+    function renderCapPanel(data) {
+      const meta = document.getElementById('capMeta');
+      const alertEl = document.getElementById('capAlert');
+      const list = document.getElementById('capLines');
+      if (!list) return;
+      if (data.error) {
+        if (meta) meta.textContent = '不可用';
+        alertEl.style.display = '';
+        alertEl.textContent = '预览失败：' + data.error;
+        list.innerHTML = '';
+        capOverlay.textContent = '';
+        return;
+      }
+      if (meta) {
+        const dc = data.dictCounts;
+        meta.textContent = capState.lines.length + ' 行 · max-len ' + (data.maxLen || 12) +
+          (dc ? ' · 词典 ' + (dc.global + dc.local) + ' 条' : '');
+        if (dc) meta.title = '纠错词典生效：全局 ' + dc.global + ' 条 + 片内 ' + dc.local + ' 条（重跑转录后页面可能无法定位旧条目的覆盖层，但烧字幕仍生效）';
+      }
+      const alerts = [];
+      (data.failures || []).forEach(f => alerts.push('⚠ ' + f));
+      (data.warnings || []).forEach(w => alerts.push('⚠ 断行警告：' + (typeof w === 'string' ? w : JSON.stringify(w))));
+      alertEl.style.display = alerts.length ? '' : 'none';
+      alertEl.innerHTML = alerts.map(a => '<div>' + escapeHtml(a) + '</div>').join('');
+      list.innerHTML = '';
+      capState.lines.forEach((ln, i) => {
+        const row = document.createElement('div');
+        row.className = 'cap-line';
+        row.dataset.i = i;
+        row.innerHTML = '<span class="t">' + formatTime(ln.startMs / 1000) + '</span><span>' + escapeHtml(ln.text) + '</span>';
+        row.addEventListener('click', () => {
+          const t = expandTime(ln.startMs / 1000 + 0.01);
+          if (t != null) { clearPreview(); video.currentTime = t; }
+        });
+        list.appendChild(row);
+      });
+      updateCapOverlay(video.currentTime);
+    }
+
+    // 原始轴 t(秒) → 剪后轴(秒)：扣掉 t 之前所有切掉区间；t 落在切掉区间内 → null
+    function collapseTime(t) {
+      const cuts = getPlaybackCuts();
+      let removed = 0;
+      for (const c of cuts) {
+        if (t >= c.end) removed += (c.end - c.start);
+        else if (t > c.start) return null;
+        else break;   // cuts 按时间升序
+      }
+      return t - removed;
+    }
+    // 剪后轴(秒) → 原始轴(秒)
+    function expandTime(ct) {
+      const cuts = getPlaybackCuts();
+      let t = ct;
+      for (const c of cuts) {
+        if (t >= c.start) t += (c.end - c.start);
+        else break;
+      }
+      const dur = (peaksData && peaksData.duration) || video.duration || t;
+      return Math.max(0, Math.min(t, dur));
+    }
+    function updateCapOverlay(t) {
+      if (!capState.on) return;
+      const ct = collapseTime(t);
+      let line = null, li = -1;
+      if (ct != null && capState.lines.length) {
+        const ms = ct * 1000;
+        let lo = 0, hi = capState.lines.length - 1;
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1;
+          const L = capState.lines[mid];
+          if (L.startMs <= ms) {
+            if (L.endMs > ms) { line = L; li = mid; break; }
+            lo = mid + 1;
+          } else hi = mid - 1;
+        }
+      }
+      capOverlay.textContent = line ? line.text : '';
+      const list = document.getElementById('capLines');
+      if (list) {
+        const cur = list.querySelector('.cap-line.current');
+        const next = li >= 0 ? list.querySelector('.cap-line[data-i="' + li + '"]') : null;
+        if (cur !== next) {
+          if (cur) cur.classList.remove('current');
+          if (next) next.classList.add('current');
+        }
+      }
+    }
+    // .ass 视觉等比还原：PlayResY 1280 下 Fontsize 54 / Outline 5 / MarginV 105 / MarginL,R 42
+    function layoutCapOverlay() {
+      const r = video.getBoundingClientRect();
+      const h = r.height || 280, w = r.width || 158;
+      capOverlay.style.fontSize = (h * 54 / 1280) + 'px';
+      capOverlay.style.bottom = (h * 105 / 1280) + 'px';
+      capOverlay.style.padding = '0 ' + (w * 42 / 720) + 'px';
+      capOverlay.style.webkitTextStroke = (h * 10 / 1280) + 'px #141414';
+    }
+    video.addEventListener('loadedmetadata', layoutCapOverlay);
+    video.addEventListener('seeked', () => updateCapOverlay(video.currentTime));
+    video.addEventListener('pause', () => updateCapOverlay(video.currentTime));
+    new ResizeObserver(layoutCapOverlay).observe(document.getElementById('video-container'));
   </script>
 </body>
 </html>
